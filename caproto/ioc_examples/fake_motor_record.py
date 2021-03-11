@@ -14,6 +14,100 @@ async def broadcast_precision_to_fields(record):
             await prop.write_metadata(precision=precision)
 
 
+async def motor_record_simulator(instance, async_lib, defaults=None,
+                                 tick_rate_hz=10.):
+    """
+    A simple motor record simulator.
+
+    Parameters
+    ----------
+    instance : pvproperty (ChannelDouble)
+        Ensure you set ``record='motor'`` in your pvproperty first.
+
+    async_lib : AsyncLibraryLayer
+
+    defaults : dict, optional
+        Defaults for velocity, precision, acceleration, and resolution.
+
+    tick_rate_hz : float, optional
+        Update rate in Hz.
+    """
+    if defaults is None:
+        defaults = dict(
+            velocity=0.1,
+            precision=3,
+            acceleration=1.0,
+            resolution=1e-6,
+            tick_rate_hz=10.,
+        )
+
+    fields = instance.field_inst  # type: MotorFields
+    have_new_position = False
+
+    async def value_write_hook(fields, value):
+        nonlocal have_new_position
+        # This happens when a user puts to `motor.VAL`
+        # print("New position requested!", value)
+        have_new_position = True
+
+    fields.value_write_hook = value_write_hook
+
+    await instance.write_metadata(precision=defaults['precision'])
+    await broadcast_precision_to_fields(instance)
+
+    await fields.velocity.write(defaults['velocity'])
+    await fields.seconds_to_velocity.write(defaults['acceleration'])
+    await fields.motor_step_size.write(defaults['resolution'])
+
+    while True:
+        dwell = 1. / tick_rate_hz
+        target_pos = instance.value
+        diff = (target_pos - fields.user_readback_value.value)
+        # compute the total movement time based an velocity
+        total_time = abs(diff / fields.velocity.value)
+        # compute how many steps, should come up short as there will
+        # be a final write of the return value outside of this call
+        num_steps = int(total_time // dwell)
+        if abs(diff) < 1e-9 and not have_new_position:
+            if fields.stop.value != 0:
+                await fields.stop.write(0)
+            await async_lib.library.sleep(dwell)
+            continue
+
+        if fields.stop.value != 0:
+            await fields.stop.write(0)
+
+        await fields.done_moving_to_value.write(0)
+        await fields.motor_is_moving.write(1)
+
+        readback = fields.user_readback_value.value
+        step_size = diff / num_steps if num_steps > 0 else 0.0
+        resolution = max((fields.motor_step_size.value, 1e-10))
+
+        for _ in range(num_steps):
+            if fields.stop.value != 0:
+                await fields.stop.write(0)
+                await instance.write(readback)
+                break
+            if fields.stop_pause_move_go.value == 'Stop':
+                await instance.write(readback)
+                break
+
+            readback += step_size
+            raw_readback = readback / resolution
+            await fields.user_readback_value.write(readback)
+            await fields.dial_readback_value.write(readback)
+            await fields.raw_readback_value.write(raw_readback)
+            await async_lib.library.sleep(dwell)
+        else:
+            # Only executed if we didn't break
+            await fields.user_readback_value.write(target_pos)
+
+        await fields.motor_is_moving.write(0)
+        await fields.done_moving_to_value.write(1)
+        have_new_position = False
+
+
 class FakeMotor(PVGroup):
     motor = pvproperty(value=0.0, name='', record='motor',
                        precision=3)
@@ -35,70 +129,13 @@ class FakeMotor(PVGroup):
             'resolution': resolution,
         }
 
-    @motor.putter
-    async def motor(self, instance, value):
-        self._have_new_position = True
-        return value
-
     @motor.startup
     async def motor(self, instance, async_lib):
-        self.async_lib = async_lib
-
-        await self.motor.write_metadata(precision=self.defaults['precision'])
-        await broadcast_precision_to_fields(self.motor)
-
-        fields = self.motor.field_inst  # type: MotorFields
-        await fields.velocity.write(self.defaults['velocity'])
-        await fields.seconds_to_velocity.write(self.defaults['acceleration'])
-        await fields.motor_step_size.write(self.defaults['resolution'])
-
-        while True:
-            dwell = 1. / self.tick_rate_hz
-            target_pos = self.motor.value
-            diff = (target_pos - fields.user_readback_value.value)
-            # compute the total movement time based an velocity
-            total_time = abs(diff / fields.velocity.value)
-            # compute how many steps, should come up short as there will
-            # be a final write of the return value outside of this call
-            num_steps = int(total_time // dwell)
-            if abs(diff) < 1e-9 and not self._have_new_position:
-                if fields.stop.value != 0:
-                    await fields.stop.write(0)
-                await async_lib.library.sleep(dwell)
-                continue
-
-            if fields.stop.value != 0:
-                await fields.stop.write(0)
-
-            await fields.done_moving_to_value.write(0)
-            await fields.motor_is_moving.write(1)
-
-            readback = fields.user_readback_value.value
-            step_size = diff / num_steps if num_steps > 0 else 0.0
-            resolution = max((fields.motor_step_size.value, 1e-10))
-
-            for _ in range(num_steps):
-                if fields.stop.value != 0:
-                    await fields.stop.write(0)
-                    await self.motor.write(readback)
-                    break
-                if fields.stop_pause_move_go.value == 'Stop':
-                    await self.motor.write(readback)
-                    break
-
-                readback += step_size
-                raw_readback = readback / resolution
-                await fields.user_readback_value.write(readback)
-                await fields.dial_readback_value.write(readback)
-                await fields.raw_readback_value.write(raw_readback)
-                await async_lib.library.sleep(dwell)
-            else:
-                # Only executed if we didn't break
-                await fields.user_readback_value.write(target_pos)
-
-            await fields.motor_is_moving.write(0)
-            await fields.done_moving_to_value.write(1)
-            self._have_new_position = False
+        # Start the simulator:
+        await motor_record_simulator(
+            self.motor, async_lib,
+            tick_rate_hz=self.tick_rate_hz,
+        )
 
 
 class FakeMotorIOC(PVGroup):
