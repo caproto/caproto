@@ -4,7 +4,6 @@ import caproto.docs.utils
 import caproto.ioc_examples.chirp
 import caproto.ioc_examples.custom_write
 import caproto.ioc_examples.decay
-import caproto.ioc_examples.inline_style
 import caproto.ioc_examples.io_interrupt
 import caproto.ioc_examples.macros
 import caproto.ioc_examples.mini_beamline
