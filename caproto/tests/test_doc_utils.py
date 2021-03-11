@@ -1,11 +1,9 @@
 import pytest
 
 import caproto.docs.utils
-import caproto.ioc_examples.all_in_one
 import caproto.ioc_examples.chirp
 import caproto.ioc_examples.custom_write
 import caproto.ioc_examples.decay
-import caproto.ioc_examples.inline_style
 import caproto.ioc_examples.io_interrupt
 import caproto.ioc_examples.macros
 import caproto.ioc_examples.mini_beamline
@@ -23,15 +21,17 @@ import caproto.ioc_examples.too_clever.trigger_with_pc
 import caproto.ioc_examples.worker_thread
 import caproto.ioc_examples.worker_thread_pc
 
+from . import ioc_all_in_one, ioc_inline_style
+
 
 @pytest.fixture(
     params=[
-        caproto.ioc_examples.all_in_one.MyPVGroup,
+        ioc_all_in_one.MyPVGroup,
         caproto.ioc_examples.chirp.Chirp,
         caproto.ioc_examples.decay.Decay,
         caproto.ioc_examples.thermo_sim.Thermo,
         caproto.ioc_examples.custom_write.CustomWrite,
-        caproto.ioc_examples.inline_style.InlineStyleIOC,
+        ioc_inline_style.InlineStyleIOC,
         caproto.ioc_examples.io_interrupt.IOInterruptIOC,
         caproto.ioc_examples.macros.MacroifiedNames,
         caproto.ioc_examples.mini_beamline.MiniBeamline,

@@ -1,17 +1,30 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
-import numpy as np
 import time
 from textwrap import dedent
+
+import numpy as np
+
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
+
+
+def calculate_temperature(T0, setpoint, K, omega, Tvar):
+    """
+    Calculate temperature according to the following formula:
+
+    :math:`T_{output} = T_{var} exp^{-(t - t_0)/K} sin(ω t) + T_{setpoint}`
+    """
+    t = time.monotonic()
+    return ((Tvar *
+             np.exp(-(t - T0) / K) *
+             np.sin(omega * t)) +
+            setpoint)
 
 
 class Thermo(PVGroup):
     """
     Simulates (poorly) an oscillating temperature controller.
 
-    Follows :math:`T_{output} = T_{var} exp^{-(t - t_0)/K} sin(ω t) + T_{setpoint}`
-
-    The default prefix is `thermo:`
+    The default prefix is ``"thermo:"``.
 
     Readonly PVs
     ------------
@@ -29,37 +42,56 @@ class Thermo(PVGroup):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._T0 = time.monotonic()
+        self.reset_t0()
 
-    readback = pvproperty(value=0, dtype=float, read_only=True,
-                          name='I',
-                          record='ai')
+    readback = pvproperty(
+        value=0,
+        dtype=float,
+        read_only=True,
+        name='I',
+        record='ai',
+        doc="Readback temperature"
+    )
 
-    setpoint = pvproperty(value=100, dtype=float, name='SP')
-    K = pvproperty(value=10, dtype=float)
-    omega = pvproperty(value=np.pi, dtype=float)
-    Tvar = pvproperty(value=10, dtype=float)
+    setpoint = pvproperty(
+        value=100,
+        dtype=float,
+        name='SP',
+        doc="Setpoint temperature"
+    )
+    K = pvproperty(
+        value=10,
+        dtype=float,
+        doc="Decay constant"
+    )
+    omega = pvproperty(
+        value=np.pi,
+        dtype=float,
+        doc="Oscillation frequency"
+    )
+    Tvar = pvproperty(
+        value=10,
+        dtype=float,
+        doc="Scale of oscillations",
+    )
 
     @readback.scan(period=.1, use_scan_field=True)
     async def readback(self, instance, async_lib):
-
-        def t_rbv(T0, setpoint, K, omega, Tvar,):
-            t = time.monotonic()
-            return ((Tvar *
-                     np.exp(-(t - self._T0) / K) *
-                     np.sin(omega * t)) +
-                    setpoint)
-
-        T = t_rbv(T0=self._T0,
-                  **{k: getattr(self, k).value
-                     for k in ['setpoint', 'K', 'omega', 'Tvar']})
-
-        await instance.write(value=T)
+        await self.readback.write(value=calculate_temperature(
+            T0=self._T0,
+            setpoint=self.setpoint.value,
+            K=self.K.value,
+            omega=self.omega.value,
+            Tvar=self.Tvar.value,
+        ))
 
     @setpoint.putter
     async def setpoint(self, instance, value):
-        self._T0 = time.monotonic()
+        self.reset_t0()
         return value
+
+    def reset_t0(self):
+        self._T0 = time.monotonic()
 
 
 if __name__ == '__main__':

@@ -83,6 +83,7 @@ class _TransportWrapper:
         self.writer = writer
         self.loop = loop or get_running_loop()
         self.sock = self.writer.get_extra_info('socket')
+        self.lock = asyncio.Lock()
 
     def getsockname(self):
         return self.writer.get_extra_info('sockname')
@@ -93,8 +94,9 @@ class _TransportWrapper:
     async def send(self, bytes_to_send):
         """Sends data over a connected socket."""
         try:
-            self.writer.write(bytes_to_send)
-            await self.writer.drain()
+            async with self.lock:
+                self.writer.write(bytes_to_send)
+                await self.writer.drain()
         except OSError as exc:
             try:
                 host, port = self.getpeername()

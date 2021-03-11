@@ -34,6 +34,7 @@ __all__ = ['AsyncLibraryLayer',
            'NestedPvproperty', 'PVGroup', 'PVSpec', 'SubGroup',
            'channeldata_from_pvspec', 'data_class_from_pvspec',
            'expand_macros', 'get_pv_pair_wrapper', 'pvfunction', 'pvproperty',
+           'scan_wrapper',
 
            'PvpropertyData', 'PvpropertyReadOnlyData',
            'PvpropertyByte', 'PvpropertyByteRO',
@@ -43,9 +44,10 @@ __all__ = ['AsyncLibraryLayer',
            'PvpropertyBoolEnum', 'PvpropertyBoolEnumRO',
            'PvpropertyEnum', 'PvpropertyEnumRO',
            'PvpropertyInteger', 'PvpropertyIntegerRO',
+           'PvpropertyShort', 'PvpropertyShortRO',
            'PvpropertyString', 'PvpropertyStringRO',
 
-           'ioc_arg_parser', 'template_arg_parser'
+           'ioc_arg_parser', 'template_arg_parser', 'run',
            ]
 
 
@@ -1894,3 +1896,36 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
                                              argv=argv, macros=macros,
                                              supported_async_libs=supported_async_libs)
     return split_args(parser.parse_args())
+
+
+def run(pvdb, *,
+        module_name="caproto.asyncio.server",
+        interfaces=None,
+        log_pv_names=False,
+        startup_hook=None):
+    """
+    Run an IOC, given its PV database dictionary and async-library module name.
+
+    Parameters
+    ----------
+    pvdb : dict
+        The PV database dictionary.
+
+    module_name : str, optional
+        The async library module name.  Defaults to using asyncio.
+
+    interfaces : list, optional
+        List of interfaces to listen on.
+
+    log_pv_names : bool, optional
+        Log PV names at startup.
+
+    startup_hook : coroutine, optional
+        Hook to call at startup with the ``async_lib`` shim.
+    """
+    from importlib import import_module  # to avoid leaking into module ns
+    module = import_module(module_name)
+    run = module.run
+    return run(
+        pvdb, interfaces=interfaces, log_pv_names=log_pv_names,
+        startup_hook=startup_hook)

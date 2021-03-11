@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-import termios
-import fcntl
-import sys
-import os
-import threading
 import atexit
+import fcntl
+import os
+import sys
+import termios
+import textwrap
+import threading
 
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 
 def start_io_interrupt_monitor(new_value_callback):
@@ -58,7 +59,20 @@ def start_io_interrupt_monitor(new_value_callback):
 
 
 class IOInterruptIOC(PVGroup):
-    keypress = pvproperty(value='', max_length=10)
+    """
+    An IOC that updates on keypress events.
+
+    PVs
+    ---
+    keypress (str)
+        The latest key pressed in the IOC terminal.
+    """
+    keypress = pvproperty(
+        value='',
+        max_length=10,
+        doc="Latest keypress",
+        read_only=True,
+    )
 
     # NOTE the decorator used here:
     @keypress.startup
@@ -69,9 +83,11 @@ class IOInterruptIOC(PVGroup):
 
         # Start a separate thread that monitors keyboard input, telling it to
         # put new values into our async-friendly queue
-        thread = threading.Thread(target=start_io_interrupt_monitor,
-                                  daemon=True,
-                                  kwargs=dict(new_value_callback=queue.put))
+        thread = threading.Thread(
+            target=start_io_interrupt_monitor,
+            daemon=True,
+            kwargs=dict(new_value_callback=queue.put)
+        )
         thread.start()
 
         # Loop and grab items from the queue one at a time
@@ -87,7 +103,8 @@ class IOInterruptIOC(PVGroup):
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='io:',
-        desc='Run an IOC that updates via I/O interrupt on key-press events.')
+        desc=textwrap.dedent(IOInterruptIOC.__doc__),
+    )
 
     ioc = IOInterruptIOC(**ioc_options)
     run(ioc.pvdb, **run_options)

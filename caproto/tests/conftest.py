@@ -248,10 +248,12 @@ def _caproto_ioc(prefix, request):
                empty_char=prefix + 'empty_char',
                empty_float=prefix + 'empty_float',
                )
-    process = run_example_ioc('caproto.ioc_examples.type_varieties',
-                              request=request,
-                              pv_to_check=pvs['float'],
-                              args=('--prefix', prefix,))
+    process = run_example_ioc(
+        'caproto.ioc_examples.advanced.type_varieties',
+        request=request,
+        pv_to_check=pvs['float'],
+        args=('--prefix', prefix,)
+    )
     return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs,
                            type='caproto')
 

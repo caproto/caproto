@@ -1,45 +1,79 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 from caproto import ChannelType
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 
 class ArrayIOC(PVGroup):
-    # Define a scalar integer (implicit max_length=1)
-    scalar_int = pvproperty(value=1)
-    # Define a scalar integer, using the old syntax (implicit max_length=1)
-    scalar_int2 = pvproperty(value=[2])
-    # Define an integer array. Initial value is [3], 4 more values will fit.
-    array_int = pvproperty(value=3, max_length=5)
+    """Simple examples of scalar and array-valued pvproperties."""
+    scalar_int = pvproperty(
+        value=1,
+        doc="A scalar integer",
+    )
+    scalar_int2 = pvproperty(
+        value=[2],
+        doc="A scalar integer - as len([2]) == 1",
+    )
+    array_int = pvproperty(
+        value=3,
+        max_length=5,
+        doc="An integer array. Initial value is [3], 4 more values will fit."
+    )
+    scalar_float = pvproperty(
+        value=1.01,
+        precision=5,
+        doc="A scalar float (implicit max_length=1)",
+    )
+    array_float = pvproperty(
+        value=3.01,
+        max_length=5,
+        precision=5,
+        doc="A float array. Initial value is [3.01], 4 more values will fit.",
+    )
 
-    # Define a scalar integer (implicit max_length=1)
-    scalar_float = pvproperty(value=1.01, precision=5)
-    # Define an integer array. Initial value is [3], 4 more values will fit.
-    array_float = pvproperty(value=3.01, max_length=5, precision=5)
+    scalar_string = pvproperty(
+        value='string1',
+        dtype=ChannelType.STRING,
+        doc="A normal string, holding up to 40 characters."
+    )
+    array_string = pvproperty(
+        value=['string1', 'string2'],
+        max_length=5,
+        dtype=ChannelType.STRING,
+        doc="An array of up to 5 strings. String arrays are not normally used."
+    )
 
-    # Strings can be arrays, but this is generally not used:
-    scalar_string = pvproperty(value='string1', dtype=ChannelType.STRING)
-    array_string = pvproperty(value=['string1', 'string2'], max_length=5,
-                              dtype=ChannelType.STRING)
-
-    # BYTE, CHAR cannot be arrays - max_length refers to the string length:
-    byte = pvproperty(value=b'byte0123', max_length=10)
-    char = pvproperty(value='char0123', string_encoding='latin-1',
-                      max_length=10)
-    # ENUM should not be used as an array type:
-    enum = pvproperty(value='no', enum_strings=['no', 'yes'],
-                      dtype=ChannelType.ENUM, record='bi')
+    byte = pvproperty(
+        value=b'byte0123',
+        max_length=10,
+        doc='A byte array (no encoding) of up to 10 characters.',
+    )
+    char = pvproperty(
+        value='char0123',
+        string_encoding='latin-1',
+        max_length=10,
+        doc='A string with latin-1 encoding of up to 10 characters.',
+    )
+    enum = pvproperty(
+        value='no',
+        enum_strings=['no', 'yes'],
+        dtype=ChannelType.ENUM,
+        record='bi',
+        doc='A scalar enum',
+    )
 
     @scalar_int.scan(period=1)
     async def scalar_int(self, instance, async_lib):
-        print('values',
-              self.scalar_int.value,
-              self.scalar_int2.value,
-              self.array_int.value)
+        print(
+            'The current values are:',
+            self.scalar_int.value,
+            self.scalar_int2.value,
+            self.array_int.value
+        )
 
 
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='arr:',
-        desc='Examples of array- and scalar-valued pvproperties')
+        desc=ArrayIOC.__doc__)
     ioc = ArrayIOC(**ioc_options)
     run(ioc.pvdb, **run_options)

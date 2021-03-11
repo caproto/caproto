@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-from pprint import pprint
 import random
+from pprint import pprint
 
-from caproto.server import (pvproperty, PVGroup, pvfunction, ioc_arg_parser,
-                            run)
+from caproto.server import PVGroup, ioc_arg_parser, pvfunction, pvproperty, run
 
 
 class MyPVGroup(PVGroup):

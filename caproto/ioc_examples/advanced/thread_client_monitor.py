@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-import caproto as ca
-
-import caproto.threading.client
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
-
 from textwrap import dedent
 
+import caproto as ca
+import caproto.threading.client
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 _default_thread_context = None
 

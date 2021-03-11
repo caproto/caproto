@@ -8,12 +8,11 @@ import time
 import pytest
 
 import caproto as ca
-
 from caproto import ChannelType
-from .epics_test_utils import (run_caget, run_caput, has_caget, has_caput)
-from .conftest import array_types, run_example_ioc
-from caproto.sync.client import write, read, ErrorResponseReceived
+from caproto.sync.client import ErrorResponseReceived, read, write
 
+from .conftest import array_types, run_example_ioc
+from .epics_test_utils import has_caget, has_caput, run_caget, run_caput
 
 caget_checks = sum(
     ([(pv, dtype),
@@ -323,9 +322,12 @@ def test_char_write(request, caproto_ioc):
 @pytest.mark.parametrize('async_lib', ['asyncio', 'curio', 'trio'])
 def test_write_without_notify(request, prefix, async_lib):
     pv = f'{prefix}pi'
-    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
-                    args=['--prefix', prefix, '--async-lib', async_lib],
-                    pv_to_check=pv)
+    run_example_ioc(
+        'caproto.ioc_examples.advanced.type_varieties',
+        request=request,
+        args=['--prefix', prefix, '--async-lib', async_lib],
+        pv_to_check=pv
+    )
     write(pv, 3.179, notify=False)
     # We do not get notified so we have to poll for an update.
     for _attempt in range(20):

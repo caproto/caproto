@@ -871,6 +871,64 @@ class Context:
 
         self.log.debug('Context search-results processing thread has exited.')
 
+    async def monitor(self, *pv_names, context=None, data_type='time'):
+        """
+        Monitor pv_names asynchronously, yielding events as they happen.
+
+        Parameters
+        ----------
+        *pv_names : str
+            PV names to monitor.
+
+        data_type : {'time', 'control', 'native'}
+            The subscription type.
+
+        Yields
+        -------
+        event : {'subscription', 'connection'}
+            The event type.
+
+        context : str or Subscription
+            For a 'connection' event, this is the PV name.  For a 'subscription'
+            event, this is the `Subscription` instance.
+
+        data : str or EventAddResponse
+            For a 'subscription' event, the `EventAddResponse` holds the data and
+            timestamp.  For a 'connection' event, this is one of ``{'connected',
+            'disconnected'}``.
+        """
+        queue = AsyncioQueue()
+
+        def value_update(sub, event_add_response):
+            queue.put(('subscription', sub, event_add_response))
+
+        def connection_state_callback(pv, state):
+            queue.put(('connection', pv, state))
+
+        channels = await self.get_pvs(
+            *pv_names, connection_state_callback=connection_state_callback
+        )
+        subscriptions = []
+
+        for channel in channels:
+            sub = channel.subscribe(data_type=data_type)
+            token = sub.add_callback(value_update)
+            subscriptions.append(
+                dict(
+                    channel=channel,
+                    sub=sub,
+                    token=token,
+                )
+            )
+
+        try:
+            while True:
+                event, context, data = await queue.async_get()
+                yield event, context, data
+        finally:
+            for info in subscriptions.values():
+                await info['sub'].remove_callback(info['token'])
+
 
 class VirtualCircuitManager:
     """
@@ -1241,16 +1299,17 @@ class VirtualCircuitManager:
         else:
             self.log.debug('Not attempting reconnection', extra=tags)
 
-        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks",
-                       extra=tags)
-        await self.user_callback_executor.shutdown()
-
     async def disconnect(self):
         await self._disconnected()
         if self.transport is None:
             return
 
         self.log.debug('Circuit manager disconnected by user')
+
+        tags = {'their_address': self.circuit.address}
+        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks",
+                       extra=tags)
+        await self.user_callback_executor.shutdown()
 
 
 def ensure_connected(func):

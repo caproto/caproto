@@ -37,34 +37,36 @@ class EnumIOC(PVGroup):
     mbbi (enum) - a multi-bit binary input (mbbi) record
     """
 
-    bo = pvproperty(value='One Value',
-                    enum_strings=['Zero Value', 'One Value'],
-                    record='bo',
-                    dtype=ChannelType.ENUM)
-    bi = pvproperty(value='a',
-                    enum_strings=['a', 'b'],
-                    record='bi',
-                    dtype=ChannelType.ENUM)
-    mbbi = pvproperty(value='one',
-                      enum_strings=['zero',
-                                    'one',
-                                    'two',
-                                    'three',
-                                    'four'],
-                      record='mbbi',
-                      dtype=ChannelType.ENUM
-                      )
+    bo = pvproperty(
+        value="One Value",
+        enum_strings=["Zero Value", "One Value"],
+        record="bo",
+        dtype=ChannelType.ENUM,
+    )
+    bi = pvproperty(
+        value="a",
+        enum_strings=["a", "b"],
+        record="bi",
+        dtype=ChannelType.ENUM,
+    )
+    mbbi = pvproperty(
+        value="one",
+        enum_strings=["zero", "one", "two", "three", "four"],
+        record="mbbi",
+        dtype=ChannelType.ENUM,
+    )
 
     # A new, easier syntax:
     enum_class = pvproperty(
         value=MyEnum.on,
-        record='mbbi',
+        record="mbbi",
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
-        default_prefix='enum:',
-        desc=dedent(EnumIOC.__doc__))
+        default_prefix="enum:",
+        desc=dedent(EnumIOC.__doc__),
+    )
     ioc = EnumIOC(**ioc_options)
     run(ioc.pvdb, **run_options)

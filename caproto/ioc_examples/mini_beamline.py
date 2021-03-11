@@ -6,14 +6,14 @@ motors and is used for demos and tutorials.
 import contextvars
 import functools
 import math
+import textwrap
 import time
 
 import numpy as np
 
 from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
 
-internal_process = contextvars.ContextVar('internal_process',
-                                          default=False)
+internal_process = contextvars.ContextVar("internal_process", default=False)
 
 
 def no_reentry(func):
@@ -23,7 +23,7 @@ def no_reentry(func):
             return
         try:
             internal_process.set(True)
-            return (await func(*args, **kwargs))
+            return await func(*args, **kwargs)
         finally:
             internal_process.set(False)
 
@@ -34,23 +34,53 @@ def _arrayify(func):
     @functools.wraps(func)
     def inner(*args):
         return func(*(np.asarray(a) for a in args))
+
     return inner
 
 
 class _JitterDetector(PVGroup):
-    det = pvproperty(value=0, dtype=float, read_only=True,
-                     doc='Scalar detector value')
+    """
+    A jittery base class which assumes the subclass implements ``_read()``.
 
-    @det.getter
-    async def det(self, instance):
-        return (await self._read(instance))
+    The pvproperty ``det`` will be periodically updated based on the result of
+    the subclass ``_read()``.
+    """
+    det = pvproperty(
+        value=0,
+        dtype=float,
+        read_only=True,
+        doc="Scalar detector value",
+    )
 
-    mtr = pvproperty(value=0, dtype=float, precision=3, record='ai', doc='Motor')
-    exp = pvproperty(value=1, dtype=float, doc='Exponential value')
-    vel = pvproperty(value=1, dtype=float, doc='Velocity')
+    @det.scan(period=0.5)
+    async def det(self, instance, async_lib):
+        value = await self._read()
+        await self.det.write(value=value)
 
-    mtr_tick_rate = pvproperty(value=10, dtype=float, units='Hz',
-                               doc='Update tick rate')
+    mtr = pvproperty(
+        value=0,
+        dtype=float,
+        precision=3,
+        record="ai",
+        doc="Motor",
+    )
+    exp = pvproperty(
+        value=1,
+        dtype=float,
+        doc="Exponential value",
+    )
+    vel = pvproperty(
+        value=1,
+        dtype=float,
+        doc="Velocity",
+    )
+
+    mtr_tick_rate = pvproperty(
+        value=10,
+        dtype=float,
+        units="Hz",
+        doc="Update tick rate",
+    )
 
     @exp.putter
     async def exp(self, instance, value):
@@ -68,7 +98,7 @@ class _JitterDetector(PVGroup):
         # "tick" at 10Hz
         dwell = 1 / self.mtr_tick_rate.value
 
-        disp = (value - instance.value)
+        disp = value - instance.value
         # compute the total movement time based an velocity
         total_time = abs(disp / self.vel.value)
         # compute how many steps, should come up short as there will
@@ -87,26 +117,26 @@ class _JitterDetector(PVGroup):
 class PinHole(_JitterDetector):
     """A pinhole simulation device."""
 
-    async def _read(self, instance):
+    async def _read(self):
         sigma = 5
         center = 0
-        c = - 1 / (2 * sigma * sigma)
+        c = -1 / (2 * sigma * sigma)
 
         @_arrayify
         def jitter_read(m, e, intensity):
-            N = (self.parent.N_per_I_per_s * intensity * e *
-                 np.exp(c * (m - center)**2))
+            N = (
+                self.parent.N_per_I_per_s * intensity * e *
+                np.exp(c * (m - center) ** 2)
+            )
             return np.random.poisson(N)
 
-        return jitter_read(self.mtr.value,
-                           self.exp.value,
-                           self.parent.current.value)
+        return jitter_read(self.mtr.value, self.exp.value, self.parent.current.value)
 
 
 class Edge(_JitterDetector):
     """An edge simulation device."""
 
-    async def _read(self, instance):
+    async def _read(self):
         sigma = 2.5
         center = 5
         c = 1 / sigma
@@ -114,33 +144,28 @@ class Edge(_JitterDetector):
         @_arrayify
         def jitter_read(m, e, intensity):
             s = math.erfc(c * (-m + center)) / 2
-            N = (self.parent.N_per_I_per_s * intensity * e * s)
+            N = self.parent.N_per_I_per_s * intensity * e * s
             return np.random.poisson(N)
 
-        return jitter_read(self.mtr.value,
-                           self.exp.value,
-                           self.parent.current.value)
+        return jitter_read(self.mtr.value, self.exp.value, self.parent.current.value)
 
 
 class Slit(_JitterDetector):
     """A slit simulation device."""
 
-    async def _read(self, instance):
+    async def _read(self):
         sigma = 2.5
         center = 7.5
         c = 1 / sigma
 
         @_arrayify
         def jitter_read(m, e, intensity):
-            s = (math.erfc(c * (m - center)) -
-                 math.erfc(c * (m + center))) / 2
+            s = (math.erfc(c * (m - center)) - math.erfc(c * (m + center))) / 2
 
-            N = (self.parent.N_per_I_per_s * intensity * e * s)
+            N = self.parent.N_per_I_per_s * intensity * e * s
             return np.random.poisson(N)
 
-        return jitter_read(self.mtr.value,
-                           self.exp.value,
-                           self.parent.current.value)
+        return jitter_read(self.mtr.value, self.exp.value, self.parent.current.value)
 
 
 class MovingDot(PVGroup):
@@ -152,66 +177,87 @@ class MovingDot(PVGroup):
 
     background = 1000
 
-    Xcen = Ycen = 0
+    Xcen = 0
+    Ycen = 0
 
-    det = pvproperty(value=[0] * N * M,
-                     dtype=float,
-                     read_only=True,
-                     doc=f'Detector image ({N}x{M})'
-                     )
+    det = pvproperty(
+        value=[0] * N * M,
+        dtype=float,
+        read_only=True,
+        doc=f"Detector image ({N}x{M})"
+    )
 
-    @det.getter
-    async def det(self, instance):
-        N = self.N
-        M = self.M
-        back = np.random.poisson(self.background, (N, M))
+    @det.scan(period=2.0)
+    async def det(self, instance, async_lib):
+        back = np.random.poisson(self.background, (self.N, self.M))
         if not self.shutter_open.value:
             await self.img_sum.write([back.sum()])
-            return back.ravel()
-        x = self.mtrx.value
-        y = self.mtry.value
+            await instance.write(value=back.ravel())
+            return
 
-        Y, X = np.ogrid[:N, :M]
+        Y, X = np.ogrid[:self.N, :self.M]
 
-        X = X - M / 2 + x
-        Y = Y - N / 2 + y
+        X = X - self.M / 2 + self.mtrx.value
+        Y = Y - self.N / 2 + self.mtry.value
 
         X /= self.sigmax
         Y /= self.sigmay
 
-        dot = np.exp(-(X**2 + Y**2) / 2) * np.exp(- (x**2 + y**2) / 100**2)
+        dot = (
+            np.exp(-(X ** 2 + Y ** 2) / 2) *
+            np.exp(-(self.mtrx.value ** 2 + self.mtry.value ** 2) / 100 ** 2)
+        )
 
         I = self.parent.current.value  # noqa
         e = self.exp.value
-        measured = (self.parent.N_per_I_per_s * dot * e * I)
-        ret = (back + np.random.poisson(measured))
-        await self.img_sum.write([ret.sum()])
-        return ret.ravel()
+        measured = self.parent.N_per_I_per_s * dot * e * I
+        ret = back + np.random.poisson(measured)
+        await self.img_sum.write(value=ret.sum())
+        await instance.write(value=ret.ravel())
 
-    img_sum = pvproperty(value=0, read_only=True, dtype=float)
-    mtrx = pvproperty(value=0, dtype=float)
-    mtry = pvproperty(value=0, dtype=float)
+    img_sum = pvproperty(value=0, read_only=True, dtype=float, doc="Image sum")
+    mtrx = pvproperty(value=0, dtype=float, doc="Motor X")
+    mtry = pvproperty(value=0, dtype=float, doc="Motor Y")
 
     exp = pvproperty(value=1, dtype=float)
 
     @exp.putter
     async def exp(self, instance, value):
-        value = np.clip(value, a_min=0, a_max=None)
-        return value
+        """Clip the value to be >= 0."""
+        return np.clip(value, a_min=0, a_max=None)
 
-    shutter_open = pvproperty(value=1, dtype=int, doc='Shutter open/close')
-
-    ArraySizeY_RBV = pvproperty(value=N, dtype=int,
-                                read_only=True, doc='Image array size Y')
-    ArraySizeX_RBV = pvproperty(value=M, dtype=int,
-                                read_only=True, doc='Image array size X')
-    ArraySize_RBV = pvproperty(value=[N, M], dtype=int,
-                               read_only=True, doc='Image array size [Y, X]')
+    shutter_open = pvproperty(
+        value=1,
+        dtype=int,
+        doc="Shutter open/close",
+    )
+    ArraySizeY_RBV = pvproperty(
+        value=N,
+        dtype=int,
+        read_only=True,
+        doc='Image array size Y'
+    )
+    ArraySizeX_RBV = pvproperty(
+        value=M,
+        dtype=int,
+        read_only=True,
+        doc='Image array size X'
+    )
+    ArraySize_RBV = pvproperty(
+        value=[N, M],
+        dtype=int,
+        read_only=True,
+        doc='Image array size [Y, X]',
+    )
 
 
 class MiniBeamline(PVGroup):
     """
-    A collection of detectors coupled to motors and an oscillating beam current
+    A collection of detectors coupled to motors and an oscillating beam
+    current.
+
+    An IOC that provides a simulated pinhole, edge and slit with coupled with a
+    shared global current that oscillates in time.
     """
 
     N_per_I_per_s = 200
@@ -223,19 +269,18 @@ class MiniBeamline(PVGroup):
         current = 500 + 25 * np.sin(time.monotonic() * (2 * np.pi) / 4)
         await instance.write(value=current)
 
-    ph = SubGroup(PinHole, doc='Simulated pinhole')
-    edge = SubGroup(Edge, doc='Simulated edge')
-    slit = SubGroup(Slit, doc='Simulated slit')
+    ph = SubGroup(PinHole, doc="Simulated pinhole")
+    edge = SubGroup(Edge, doc="Simulated edge")
+    slit = SubGroup(Slit, doc="Simulated slit")
 
-    dot = SubGroup(MovingDot, doc='The simulated detector')
+    dot = SubGroup(MovingDot, doc="The simulated detector")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
-        default_prefix='mini:',
-        desc=('An IOC that provides a simulated pinhole, edge and slit '
-              'with coupled with a shared global current that oscillates '
-              'in time.'))
+        default_prefix="mini:",
+        desc=textwrap.dedent(MiniBeamline.__doc__),
+    )
 
     ioc = MiniBeamline(**ioc_options)
     run(ioc.pvdb, **run_options)

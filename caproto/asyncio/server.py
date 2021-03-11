@@ -31,6 +31,7 @@ class AsyncioAsyncLayer(AsyncLibraryLayer):
     name = 'asyncio'
     Event = asyncio.Event
     library = asyncio
+    sleep = staticmethod(asyncio.sleep)
     ThreadsafeQueue = AsyncioQueue
 
 
@@ -130,7 +131,7 @@ class Context(_Context):
             sock=sock,
         )
 
-    async def run(self, *, log_pv_names=False):
+    async def run(self, *, log_pv_names=False, startup_hook=None):
         'Start the server'
         self.log.info('Asyncio server starting up...')
 
@@ -180,6 +181,11 @@ class Context(_Context):
         tasks.create(self.broadcast_beacon_loop())
 
         async_lib = AsyncioAsyncLayer()
+
+        if startup_hook is not None:
+            self.log.debug('Calling startup hook %r', startup_hook.__name__)
+            tasks.create(startup_hook(async_lib))
+
         for name, method in self.startup_methods.items():
             self.log.debug('Calling startup method %r', name)
             tasks.create(method(async_lib))
@@ -227,20 +233,38 @@ class Context(_Context):
                 await self._broadcaster_recv_datagram(data, address)
 
 
-async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
+async def start_server(pvdb, *, interfaces=None, log_pv_names=False,
+                       startup_hook=None):
     '''Start an asyncio server with a given PV database'''
     ctx = Context(pvdb, interfaces)
-    ret = await ctx.run(log_pv_names=log_pv_names)
+    ret = await ctx.run(log_pv_names=log_pv_names, startup_hook=startup_hook)
     return ret
 
 
-def run(pvdb, *, interfaces=None, log_pv_names=False):
+def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
     """
+    Run an IOC, given its PV database dictionary.
+
     A synchronous function that wraps start_server and exits cleanly.
+
+    Parameters
+    ----------
+    pvdb : dict
+        The PV database.
+
+    interfaces : list, optional
+        List of interfaces to listen on.
+
+    log_pv_names : bool, optional
+        Log PV names at startup.
+
+    startup_hook : coroutine, optional
+        Hook to call at startup with the ``async_lib`` shim.
     """
     loop = asyncio.get_event_loop()
     task = loop.create_task(
-        start_server(pvdb, interfaces=interfaces, log_pv_names=log_pv_names))
+        start_server(pvdb, interfaces=interfaces, log_pv_names=log_pv_names,
+                     startup_hook=startup_hook))
     try:
         loop.run_until_complete(task)
     except KeyboardInterrupt:

@@ -1,14 +1,14 @@
 import functools
 
-import caproto as ca
 import curio
 import curio.network
 from curio import socket
 
-from ..server import AsyncLibraryLayer
-from ..server.common import (VirtualCircuit as _VirtualCircuit,
-                             Context as _Context)
+import caproto as ca
 
+from ..server import AsyncLibraryLayer
+from ..server.common import Context as _Context
+from ..server.common import VirtualCircuit as _VirtualCircuit
 
 if hasattr(curio, 'KernelExit'):
     class ServerExit(curio.KernelExit):
@@ -61,6 +61,7 @@ class CurioAsyncLayer(AsyncLibraryLayer):
     ThreadsafeQueue = UniversalQueue
     Event = curio.UniversalEvent
     library = curio
+    sleep = staticmethod(curio.sleep)
 
 
 class VirtualCircuit(_VirtualCircuit):
@@ -154,7 +155,7 @@ class Context(_Context):
                 self.log.error('Exception in task %r', task.name,
                                exc_info=task.exception)
 
-    async def run(self, *, log_pv_names=False):
+    async def run(self, *, log_pv_names=False, startup_hook=None):
         'Start the server'
         self.log.info('Curio server starting up...')
         try:
@@ -188,6 +189,11 @@ class Context(_Context):
                 await g.spawn(self.broadcast_beacon_loop)
 
                 async_lib = CurioAsyncLayer()
+                if startup_hook is not None:
+                    self.log.debug('Calling startup hook %r',
+                                   startup_hook.__name__)
+                    await g.spawn(startup_hook, async_lib)
+
                 for name, method in self.startup_methods.items():
                     self.log.debug('Calling startup method %r', name)
                     await g.spawn(method, async_lib)
@@ -222,18 +228,36 @@ class Context(_Context):
         self._stop_queue.put(None)
 
 
-async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
+async def start_server(pvdb, *, interfaces=None, log_pv_names=False,
+                       startup_hook=None):
     '''Start a curio server with a given PV database'''
     ctx = Context(pvdb, interfaces)
     try:
-        return await ctx.run(log_pv_names=log_pv_names)
+        return await ctx.run(log_pv_names=log_pv_names,
+                             startup_hook=startup_hook)
     except ServerExit:
         pass
 
 
-def run(pvdb, *, interfaces=None, log_pv_names=False):
+def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
     """
+    Run an IOC, given its PV database dictionary.
+
     A synchronous function that runs server, catches KeyboardInterrupt at exit.
+
+    Parameters
+    ----------
+    pvdb : dict
+        The PV database.
+
+    interfaces : list, optional
+        List of interfaces to listen on.
+
+    log_pv_names : bool, optional
+        Log PV names at startup.
+
+    startup_hook : coroutine, optional
+        Hook to call at startup with the ``async_lib`` shim.
     """
     try:
         return curio.run(
@@ -241,6 +265,8 @@ def run(pvdb, *, interfaces=None, log_pv_names=False):
                 start_server,
                 pvdb,
                 interfaces=interfaces,
-                log_pv_names=log_pv_names))
+                log_pv_names=log_pv_names,
+                startup_hook=startup_hook,
+            ))
     except KeyboardInterrupt:
         return

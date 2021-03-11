@@ -8,8 +8,9 @@ v0.7.1 (2020-01-13)
 Fixed
 -----
 
-- For ``pvproperty``, avoid multiple passes of macro expansion, such that
-  ``{{`` is sufficient to escape an opening curly bracket.
+- For ``pvproperty``, avoid multiple passes of macro expansion, so
+  {% raw %}``{{``{% endraw %} is now sufficient to escape curly brackets in PV
+  names.
 - The server implementation will now catch when `socket.recv` raises `OSError`.
 - Broken entrypoints have been fixed for the pathological examples,
   ``defaultdict_server`` and ``spoof_beamline``.
