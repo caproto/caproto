@@ -37,7 +37,11 @@ Added
   chance to update their state. (#734)
 - Added preliminary support of the ``raw_value`` (``.RVAL``) field for bi, bo,
   mbbi, and mbbo records.  (#734)
-
+- Added ``sleep`` to AsyncLibraryLayer. (#739)
+- Added ``startup_hook`` to ``caproto.server.run()`` (with support in asyncio,
+  curio, trio).  By convention, consider using ``__ainit__`` for this hook.
+  (#739)
+- Added ``monitor`` helper to the asyncio client. (#739)
 
 Changed
 -------
@@ -51,13 +55,14 @@ Changed
 - asyncio-based transports have mostly been removed in favor of using a
   higher-level API provided by asyncio. This should allow for more precise
   and informative exception tracebacks.  This is now used for all asyncio
-  servers and clients supported by caproto. (#720, )
+  servers and clients supported by caproto. (#720)
 - The method for generating record field ``PVGroup`` classes has been changed
   to better split auto-generated code with user-customizable field-handling
   code. (#734)
 - Improved hook method signature checker to include source code filename,
   line number, and suggested signature.  (#736)
-
+- Reworked IOC documentation and corresponding examples.  Some have been
+  moved around a bit.
 
 v0.7.1 (2020-01-13)
 ===================
