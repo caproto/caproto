@@ -88,7 +88,6 @@ def link_enum_strings(pvprop: pvproperty, index: int):
 def summarize(file=sys.stdout):
     """Summarize all supported records and their fields to a file."""
     from .base import RecordFieldGroup
-    from .registry import records
 
     all_records = [("base", RecordFieldGroup)] + list(records.items())
 

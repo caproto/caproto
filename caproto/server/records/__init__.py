@@ -10,10 +10,12 @@ _link_parent_attribute = utils.link_parent_attribute
 _link_enum_strings = utils.link_enum_strings
 
 get_record_registry = utils.get_record_registry
+summarize = utils.summarize
 
 __all__ = [
     "records",
     "RecordFieldGroup",
     "register_record",
     "get_record_registry",
+    "summarize",
 ] + list(get_record_registry())

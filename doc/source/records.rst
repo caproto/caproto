@@ -137,4 +137,4 @@ See the :ref:`records_example` example for usage.
     LsiFields
     LsoFields
     PrintfFields
-    utils.summarize
+    summarize
