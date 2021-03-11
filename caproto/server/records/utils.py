@@ -4,7 +4,7 @@ import sys
 from typing import Dict, Type
 
 from ..._constants import MAX_ENUM_STRING_SIZE
-from ...server import PVGroup, pvproperty
+from ..server import PVGroup, pvproperty
 
 logger = logging.getLogger(__name__)
 records = {}

@@ -1,6 +1,6 @@
 from ..._data import AlarmSeverity, ChannelType
-from ...server import PVGroup, pvproperty
 from .. import menus
+from ..server import PVGroup, pvproperty
 from .utils import link_parent_attribute
 
 
