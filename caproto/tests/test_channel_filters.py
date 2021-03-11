@@ -1,6 +1,8 @@
-import pytest
 import threading
 import time
+
+import pytest
+
 from ..threading.client import Context
 from .conftest import run_example_ioc
 
@@ -36,9 +38,12 @@ def context(request):
                           ])
 def test_array_filter(request, prefix, context, filter, expected):
     pv_name = f'{prefix}fib'
-    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv_name)
+    run_example_ioc(
+        'caproto.ioc_examples.advanced.type_varieties',
+        request=request,
+        args=['--prefix', prefix],
+        pv_to_check=pv_name
+    )
 
     pv, = context.get_pvs(pv_name + '.' + filter)
     pv.wait_for_connection()
@@ -60,9 +65,12 @@ def test_array_filter(request, prefix, context, filter, expected):
 
 def test_ts_filter(request, prefix, context):
     pv_name = f'{prefix}fib'
-    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv_name)
+    run_example_ioc(
+        'caproto.ioc_examples.advanced.type_varieties',
+        request=request,
+        args=['--prefix', prefix],
+        pv_to_check=pv_name
+    )
 
     # Access one element.
     pv, = context.get_pvs(pv_name)
