@@ -3,12 +3,11 @@ import keyword
 import logging
 import re
 
-from .server import pvfunction, PVGroup
-from .._data import (ChannelDouble, ChannelEnum, ChannelFloat, ChannelChar,
-                     ChannelInteger, ChannelString, ChannelByte)
+from .._data import (ChannelByte, ChannelChar, ChannelDouble, ChannelEnum,
+                     ChannelFloat, ChannelInteger, ChannelString)
 from .menus import menus
-from . import records as records_mod
-
+from .records import RecordFieldGroup, get_record_registry, mixins
+from .server import PVGroup, pvfunction
 
 logger = logging.getLogger(__name__)
 
@@ -431,13 +430,11 @@ ATTR_REPLACES = {
     re.compile('_sevrty$'): '_severity',
 }
 
-# Mixins available in the currently generated records module:
-MIXINS = (records_mod._Limits, records_mod._LimitsLong)
 
 # Keep track of the mixin fields to see if a record can use the mixin or not:
 MIXIN_SPECS = {
     mixin: {pv.pvspec.name: pv.pvspec.dtype for pv in mixin._pvs_.values()}
-    for mixin in MIXINS
+    for mixin in (mixins._Limits, mixins._LimitsLong)
 }
 
 
@@ -476,14 +473,14 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
         result['class_name'] = 'RecordFieldGroup'
         result['base_class'] = 'PVGroup'
         result['record_type'] = None
-        existing_record = records_mod.RecordFieldGroup
+        existing_record = RecordFieldGroup
     else:
         field_info = dbd_info[record_type]
         val_type = field_info.get('VAL', {'type': 'DBF_NOACCESS'})['type']
         if val_type != 'DBF_NOACCESS':
             val_channeltype = DBD_TYPE_INFO[val_type].data_type.name
             result['dtype'] = "ChannelType." + val_channeltype
-        existing_record = records_mod.records.get(record_type)
+        existing_record = get_record_registry().get(record_type)
 
     existing_field_list = []
     if existing_record:
@@ -579,20 +576,21 @@ def generate_all_records_jinja(dbd_file, *, jinja_env=None,
         The template to use to generate the source
     """
     try:
-        from caproto.tests.dbd import DbdFile
         import jinja2
+
+        from caproto.tests.dbd import DbdFile
     except ImportError as ex:
         raise ImportError(f'An optional/testing dependency is missing: {ex}')
 
     if jinja_env is None:
         jinja_env = jinja2.Environment(
-            loader=jinja2.PackageLoader("caproto", "server"),
+            loader=jinja2.PackageLoader("caproto.server", "records"),
             trim_blocks=True,
             lstrip_blocks=True,
         )
 
     dbd_file = DbdFile.parse_file(dbd_file)
-    existing_record_list = ['base'] + list(records_mod.records)
+    existing_record_list = ['base'] + list(get_record_registry())
     records = {}
     for record in ('base', ) + tuple(sorted(dbd_file.field_metadata)):
         d = record_to_template_dict(record, dbd_file.field_metadata)
@@ -652,14 +650,15 @@ def generate_all_menus_jinja(dbd_file, *, jinja_env=None,
     """
 
     try:
-        from caproto.tests.dbd import DbdFile
         import jinja2
+
+        from caproto.tests.dbd import DbdFile
     except ImportError as ex:
         raise ImportError(f'An optional/testing dependency is missing: {ex}')
 
     if jinja_env is None:
         jinja_env = jinja2.Environment(
-            loader=jinja2.PackageLoader("caproto", "server"),
+            loader=jinja2.PackageLoader("caproto.server", "records"),
             trim_blocks=True,
             lstrip_blocks=True,
         )

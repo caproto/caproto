@@ -1,0 +1,47 @@
+'''
+Contains the base field representation for EPICS base records.
+
+This file is auto-generated.  Do not modify it.
+
+If you need to add or modify fields to correct something, please use the
+``reference-dbd`` project to regenerate this file.
+
+If you need to add functionality to any record, see the module
+:mod:`caproto.server.records.records`.
+'''
+# **NOTE** **NOTE**
+# This file is auto-generated.  Please see the module docstring for details.
+# **NOTE** **NOTE**
+from ..._data import ChannelType
+from .. import menus
+from ..server import PVGroup, pvproperty
+from .mixins import _Limits, _LimitsLong
+from .utils import copy_pvproperties, link_parent_attribute
+
+
+class RecordFieldGroup(PVGroup):
+    _scan_rate_sec = None
+    _dtype = None  # to be set by subclasses
+    has_val_field = True
+
+{% set rec = records['base'] %}
+{% include "record_body.jinja2" %}
+
+
+{% for rec in records.values() | sort(attribute='sort_id') %}
+{%- if rec.record_type %}
+class {{ rec.class_name }}({{ rec.base_class }}{% if rec.mixin %}, {{ rec.mixin | join(', ') }}{% endif %}):
+    _record_type = {% if rec.record_type %}"{{ rec.record_type }}"{% else %}None{% endif %}
+
+    _dtype = {{ rec.dtype }}  # DTYP of .VAL
+{% if rec.dtype %}
+    has_val_field = True
+{% else %}
+    has_val_field = False
+{% endif %}
+    copy_pvproperties(locals(), {{ rec.base_class }}{% if rec.mixin %}, {{ rec.mixin | join(', ') }}{% endif %})
+{% include "record_body.jinja2" %}
+
+
+{% endif %}
+{% endfor %}

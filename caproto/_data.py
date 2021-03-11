@@ -493,7 +493,8 @@ class ChannelData:
 
         return (await self.write(value, flags=flags, **metadata_dict))
 
-    async def write(self, value, *, flags=0, verify_value=True, **metadata):
+    async def write(self, value, *, flags=0, verify_value=True,
+                    update_fields=True, **metadata):
         '''Set data from native Python types'''
         try:
             value = self.preprocess_value(value)
@@ -501,6 +502,11 @@ class ChannelData:
                 modified_value = await self.verify_value(value)
             else:
                 modified_value = None
+
+            if update_fields:
+                await self.update_fields(
+                    modified_value if verify_value else value
+                )
         except SkipWrite:
             # Handler raised SkipWrite to avoid the rest of this method.
             return
@@ -545,6 +551,9 @@ class ChannelData:
     def _is_eligible(self, ss):
         sync = ss.channel_filter.sync
         return sync is None or sync.m in self._snapshots[sync.s]
+
+    async def update_fields(self, value):
+        """This is a hook for subclasses to update field instance data."""
 
     async def publish(self, flags):
         # Each SubscriptionSpec specifies a certain data type it is interested
@@ -791,6 +800,18 @@ class ChannelEnum(ChannelData):
         self._data['enum_strings'] = self._validate_enum_strings(enum_strings)
 
     enum_strings = _read_only_property('enum_strings')
+
+    def get_raw_value(self, value) -> int:
+        """The raw integer value index of the provided enum string."""
+        try:
+            return self.enum_strings.index(value)
+        except ValueError:
+            return None
+
+    @property
+    def raw_value(self) -> int:
+        """The raw integer value index of the enum string."""
+        return self.get_raw_value(self.value)
 
     def __getnewargs_ex__(self):
         args, kwargs = super().__getnewargs_ex__()

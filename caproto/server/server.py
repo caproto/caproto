@@ -240,6 +240,11 @@ class PvpropertyData:
         if self.putter is not None:
             return await self.putter(self, value)
 
+    async def update_fields(self, value):
+        """This is a hook to update field instance data."""
+        if self.field_inst is not None:
+            await self.field_inst.value_write_hook(self, value)
+
     async def _server_startup(self, async_lib):
         """A per-pvproperty startup hook; enabled at __init__ time."""
         return await self.startup(self, async_lib)
@@ -872,7 +877,6 @@ class pvproperty:
         copied = pvproperty.from_pvspec(
             # pvspec is immutable
             self.pvspec,
-            record=self.record_type,
             # Allow subclasses to override field handlers without affecting
             # the parent by performing a deep copy here:
             field_spec=field_spec,
