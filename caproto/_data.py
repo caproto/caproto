@@ -17,7 +17,8 @@ from ._dbr import (DBR_STSACK_STRING, DBR_TYPES, AccessRights, AlarmSeverity,
                    SubscriptionType, _channel_type_by_name,
                    _LongStringChannelType, native_type, native_types,
                    time_types, timestamp_to_epics)
-from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
+from ._utils import (CaprotoError, CaprotoValueError, ConversionDirection,
+                     is_array_read_only)
 
 __all__ = ('Forbidden',
            'ChannelAlarm',
@@ -180,6 +181,7 @@ class ChannelAlarm:
 
 class ChannelData:
     data_type = ChannelType.LONG
+    _compatible_array_types = {}
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
                  max_length=None, string_encoding='latin-1',
@@ -733,6 +735,37 @@ class ChannelData:
         """
         return AccessRights.READ | AccessRights.WRITE
 
+    def is_compatible_array(self, value) -> bool:
+        """
+        Check if the provided value is a compatible array.
+
+        This requires that ``value`` follow the "array interface", as defined by
+        `numpy <https://numpy.org/doc/stable/reference/arrays.interface.html>`_.
+
+        Parameters
+        ----------
+        value : any
+            The value to check.
+
+        Returns
+        -------
+        bool
+            True if ``value`` is compatible, False otherwise.
+        """
+        interface = getattr(value, "__array_interface__", None)
+        if interface is None:
+            return False
+
+        dimensions = len(interface['shape'])
+        return (
+            # Ensure it's 1 dimensional:
+            dimensions == 1 and
+            # Not strided - which 1D data shouldn't be anyway...
+            interface['strides'] is None and
+            # And a compatible array type, defined in the class body:
+            interface['typestr'] in self._compatible_array_types
+        )
+
 
 class ChannelEnum(ChannelData):
     data_type = ChannelType.ENUM
@@ -968,6 +1001,7 @@ class ChannelByte(ChannelNumeric):
     'CHAR data which has no encoding'
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChannelType.CHAR
+    _compatible_array_types = {'|u1', '|i1', '|b1'}
 
     def __init__(self, *, string_encoding=None, strip_null_terminator=True,
                  **kwargs):
@@ -979,6 +1013,13 @@ class ChannelByte(ChannelNumeric):
 
     def preprocess_value(self, value):
         value = super().preprocess_value(value)
+
+        if self.is_compatible_array(value):
+            if not is_array_read_only(value):
+                value = copy.copy(value)
+            if self.max_length == 1:
+                return value[0]
+            return value
 
         if isinstance(value, (list, tuple) + backend.array_types):
             if not len(value):
@@ -1009,6 +1050,7 @@ class ChannelByte(ChannelNumeric):
 class ChannelChar(ChannelData):
     'CHAR data which masquerades as a string'
     data_type = ChannelType.CHAR
+    _compatible_array_types = {'|u1', '|i1', '|b1'}
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
                  max_length=None, string_encoding='latin-1',
@@ -1036,7 +1078,9 @@ class ChannelChar(ChannelData):
     def preprocess_value(self, value):
         value = super().preprocess_value(value)
 
-        if isinstance(value, (list, tuple) + backend.array_types):
+        if self.is_compatible_array(value):
+            value = value.tobytes()
+        elif isinstance(value, (list, tuple) + backend.array_types):
             if not len(value):
                 value = b''
             elif len(value) == 1:

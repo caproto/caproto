@@ -1161,3 +1161,31 @@ def adapt_old_callback_signature(func, weakref_set):
         # Hold a hard reference to w. Its callback removes it from this set.
         weakref_set.add(w)
     return func
+
+
+def is_array_read_only(value) -> bool:
+    """
+    Check if the provided value is flagged as read-only.
+
+    This requires that ``value`` follow the "array interface", as defined by
+    `numpy <https://numpy.org/doc/stable/reference/arrays.interface.html>`_.
+
+    Parameters
+    ----------
+    value : any
+        The value to check.
+
+    Returns
+    -------
+    bool
+        True if ``value`` is marked as read-only, False otherwise.
+    """
+    interface = getattr(value, "__array_interface__", None)
+    if interface is None:
+        return False
+
+    data = interface.get("data", None)
+    if data is None:
+        return False
+    _, is_read_only = data
+    return is_read_only
