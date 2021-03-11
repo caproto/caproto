@@ -653,6 +653,8 @@ in production!
 (TODO)
 
 
+.. currentmodule:: caproto.ioc_examples
+
 Examples
 ========
 
