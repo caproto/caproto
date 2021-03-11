@@ -28,7 +28,7 @@ in just a couple lines of Python. This opens up some interesting possibilities:
 Using the IOC Examples
 ======================
 
-.. currentmodule:: caproto.ioc_examples
+.. currentmodule:: caproto
 
 They can be started like so:
 
@@ -75,13 +75,13 @@ and use ``--prefix`` to conveniently customize the PV prefix:
 
 Type ``python3 -m caproto.ioc_examples.simple -h`` for more options.
 
-.. currentmodule:: caproto.server.server
 
 PVGroup
 =======
 
-The `PVGroup` is a container for ``pvproperty`` instances which determine how
-to represent the group's contents as EPICS process variables (PVs).
+The :class:`~.server.PVGroup` is a container for ``pvproperty``
+instances which determine how to represent the group's contents as EPICS
+process variables (PVs).
 
 You are expected to subclass from ``PVGroup`` to implement your own IOCs.
 
@@ -94,8 +94,8 @@ You are expected to subclass from ``PVGroup`` to implement your own IOCs.
 
 
 caproto uses your class definition and performs magic under the hood to create
-a simple PV name to `ChannelData` instances.  See what happens when you
-instantiate the above:
+a simple PV name to :class:`~.server.ChannelData` instances.  See what
+happens when you instantiate the above:
 
 .. code:: ipython
 
@@ -145,7 +145,8 @@ API
 .. autosummary::
     :toctree: generated
 
-    PVGroup
+    caproto.server.PVGroup
+
 
 pvproperty
 ==========
@@ -160,8 +161,6 @@ Supported data types
 ``value`` may be an instance of one of the following, or ``dtype`` may be
 one of the following types:
 
-.. currentmodule:: caproto
-
 .. list-table:: Built-in Data Type Mapping
    :header-rows: 1
 
@@ -173,19 +172,19 @@ one of the following types:
      - :class:`~.ChannelChar`
    * - bytes
      - :class:`~.server.PvpropertyByte`
-     - :class:`~.ChannelByte`
+     - :class:`.ChannelByte`
    * - int
      - :class:`~.server.PvpropertyInteger`
-     - :class:`~.ChannelInteger`
+     - :class:`.ChannelInteger`
    * - float
      - :class:`~.server.PvpropertyDouble`
-     - :class:`~.ChannelDouble`
+     - :class:`.ChannelDouble`
    * - bool
      - :class:`~.server.PvpropertyBoolEnum`
-     - :class:`~.ChannelEnum`
+     - :class:`.ChannelEnum`
    * - enum.IntEnum
      - :class:`~.server.PvpropertyEnum`
-     - :class:`~.ChannelEnum`
+     - :class:`.ChannelEnum`
 
 ``dtype`` may be omitted when a value is specified.
 
@@ -226,15 +225,15 @@ These are the special classes pvproperty uses:
 .. autosummary::
     :toctree: generated
 
-    ~caproto.server.server.PvpropertyBoolEnum
-    ~caproto.server.server.PvpropertyByte
-    ~caproto.server.server.PvpropertyChar
-    ~caproto.server.server.PvpropertyDouble
-    ~caproto.server.server.PvpropertyEnum
-    ~caproto.server.server.PvpropertyFloat
-    ~caproto.server.server.PvpropertyInteger
-    ~caproto.server.server.PvpropertyShort
-    ~caproto.server.server.PvpropertyString
+    caproto.server.PvpropertyBoolEnum
+    caproto.server.PvpropertyByte
+    caproto.server.PvpropertyChar
+    caproto.server.PvpropertyDouble
+    caproto.server.PvpropertyEnum
+    caproto.server.PvpropertyFloat
+    caproto.server.PvpropertyInteger
+    caproto.server.PvpropertyShort
+    caproto.server.PvpropertyString
 
 
 The following are the underlying, lowest-level classes for holding data which
@@ -243,17 +242,14 @@ can be sent over an EPICS V3 channel in caproto:
 .. autosummary::
     :toctree: generated
 
-    ~caproto.ChannelByte
-    ~caproto.ChannelChar
-    ~caproto.ChannelDouble
-    ~caproto.ChannelEnum
-    ~caproto.ChannelFloat
-    ~caproto.ChannelInteger
-    ~caproto.ChannelShort
-    ~caproto.ChannelString
-
-
-.. currentmodule:: caproto.server.server
+    caproto.ChannelByte
+    caproto.ChannelChar
+    caproto.ChannelDouble
+    caproto.ChannelEnum
+    caproto.ChannelFloat
+    caproto.ChannelInteger
+    caproto.ChannelShort
+    caproto.ChannelString
 
 
 Integers and floats
@@ -272,7 +268,8 @@ See the "how to" section below for more information on long strings.
 Enums
 ^^^^^
 
-A new syntax for specifying enums using built-in `enum.IntEnum` is recommended:
+A new syntax for specifying enums using built-in :class:`enum.IntEnum` is
+recommended:
 
 .. code:: python
 
@@ -507,7 +504,7 @@ change the rate to common EPICS-defined ones.
 .. autosummary::
     :toctree: generated
 
-    scan_wrapper
+    caproto.server.scan_wrapper
 
 
 Records
@@ -529,7 +526,7 @@ API
 .. autosummary::
     :toctree: generated
 
-    pvproperty
+    caproto.server.pvproperty
 
 
 General Tips
@@ -655,7 +652,7 @@ as a regular string without the long string modifier now?
 ... it's truncated to only 40 characters! There's not much we can do about it,
 so clients should just be configured to use the custom modifier.
 
-As an alternative, `~caproto.server.pvproperty` supports arrays of ``DBR_CHAR``
+As an alternative, :class:`~.server.pvproperty` supports arrays of ``DBR_CHAR``
 which are signed, 8-bit numbers, meaning its values fall in the inclusive range
 of [-127, 127].  These can also be used to represent arbitrarily long strings.
 
@@ -830,8 +827,8 @@ Where ``SYSTEM:Value`` is the setpoint, and ``SYSTEM:Value_RBV`` is the
 acknowledged it.
 
 caproto provides a simple helper tool to replicate this pattern efficiently.
-Using :func:`.get_pv_pair_wrapper`, one can dynamically generate a ``SubGroup``
-that contains both the setpoint and readback PVs.  This wrapper is
+Using :func:`.server.get_pv_pair_wrapper`, one can dynamically generate a
+``SubGroup`` that contains both the setpoint and readback PVs.  This wrapper is
 re-usable and may be used to generate any number of such pairs.
 
 .. code:: python
@@ -859,7 +856,7 @@ set different record types by specifying ``setpoint_kw=dict(record="ao")``.
 .. autosummary::
     :toctree: generated
 
-    get_pv_pair_wrapper
+    caproto.server.get_pv_pair_wrapper
 
 
 .. note::
@@ -887,12 +884,36 @@ Access all of the fields one would normally expect from that record.
 That said, some functionality is provided out-of-the-box, and you can further
 customize this functionality in your own implementations.
 
-See the `records <records_section>`_ section for further details.
+See the :doc:`records` section for further details.
+
+Further limitations/notes:
+
+* In/out links do not work
+* Many fields are not (yet) implemented
 
 ... add a client to monitor other PVs?
 --------------------------------------
 
-(TODO)
+As of the time of writing, the threading client is more well-tested than the
+asyncio client, and an example :mod:`.thread_client_monitor` was written
+around it.
+
+The above is admittedly rather complicated, but gives you a good amount of
+control. It also demonstrates thread-to-async communication by way of
+async library-independent queues.
+
+A more user-friendly (but less tested) example is
+:mod:`.ioc_examples.client_monitor_async`, which is currently limited to
+asyncio-only:
+
+.. literalinclude:: ../../caproto/ioc_examples/client_monitor_async.py
+
+.. autosummary::
+    :toctree: generated
+
+    caproto.ioc_examples.client_monitor_async.MirrorClientIOC
+
+
 
 ... get custom arguments into my IOC?
 -------------------------------------
@@ -924,8 +945,6 @@ If you buy into this ecosystem, you will be able to:
 * Auto-generate EPICS user interfaces with Typhos and PyDM
 * Track and organize your devices by way of happi
 
-
-.. currentmodule:: caproto.ioc_examples
 
 Examples
 ========
@@ -962,7 +981,7 @@ This IOC has two PVs that simply store a value.
 .. autosummary::
     :toctree: generated
 
-    ~simple.SimpleIOC
+    caproto.ioc_examples.simple.SimpleIOC
 
 
 .. ipython:: python
@@ -1038,7 +1057,7 @@ update rate controlled by a second PV, ``random_walk:dt``.
 .. autosummary::
     :toctree: generated
 
-    ~random_walk.RandomWalkIOC
+    caproto.ioc_examples.random_walk.RandomWalkIOC
 
 .. literalinclude:: ../../caproto/ioc_examples/random_walk.py
 
@@ -1075,8 +1094,8 @@ This example listens for key presses.
 .. autosummary::
     :toctree: generated
 
-    ~io_interrupt.start_io_interrupt_monitor
-    ~io_interrupt.IOInterruptIOC
+    caproto.ioc_examples.io_interrupt.start_io_interrupt_monitor
+    caproto.ioc_examples.io_interrupt.IOInterruptIOC
 
 
 .. literalinclude:: ../../caproto/ioc_examples/io_interrupt.py
@@ -1127,7 +1146,7 @@ Macros for PV names
 .. autosummary::
     :toctree: generated
 
-    ~macros.MacroifiedNames
+    caproto.ioc_examples.macros.MacroifiedNames
 
 
 .. literalinclude:: ../../caproto/ioc_examples/macros.py
@@ -1214,7 +1233,7 @@ See :doc:`records`.
 .. autosummary::
     :toctree: generated
 
-    ~records.RecordMockingIOC
+    caproto.ioc_examples.records.RecordMockingIOC
 
 
 .. literalinclude:: ../../caproto/ioc_examples/records.py
@@ -1231,76 +1250,6 @@ See :doc:`records`.
         mock:A
         mock:B
 
-RPC Server from Python Function
--------------------------------
-
-This automatically generates a SubGroup. In the future, this could be used to
-spin up a PVA RPC service. As is, for Channel Access, this provides an RPC
-function for single-user access.
-
-.. literalinclude:: ../../caproto/ioc_examples/rpc_function.py
-
-.. code-block:: bash
-
- $ python -m caproto.ioc_examples.rpc_function --list-pvs
-
-    fixed_random using the descriptor getter is: <caproto.server.server.PvpropertyInteger object at 0x1041672b0>
-    get_random using the descriptor getter is: <caproto.server.server.get_random object at 0x1041675f8>
-    get_random is an autogenerated subgroup with PVs:
-        ('rpc:get_random:low', <caproto.server.server.PvpropertyInteger object at 0x104167358>)
-        ('rpc:get_random:high', <caproto.server.server.PvpropertyInteger object at 0x104167588>)
-        ('rpc:get_random:Status', <caproto.server.server.PvpropertyStringRO object at 0x104167320>)
-        ('rpc:get_random:Retval', <caproto.server.server.PvpropertyIntegerRO object at 0x104167550>)
-        ('rpc:get_random:Process', <caproto.server.server.PvpropertyInteger object at 0x1041672e8>)
-    OrderedDict([('rpc:fixed_random',
-                <caproto.server.server.PvpropertyInteger object at 0x1041672b0>),
-                ('rpc:get_random:low',
-                <caproto.server.server.PvpropertyInteger object at 0x104167358>),
-                ('rpc:get_random:high',
-                <caproto.server.server.PvpropertyInteger object at 0x104167588>),
-                ('rpc:get_random:Status',
-                <caproto.server.server.PvpropertyStringRO object at 0x104167320>),
-                ('rpc:get_random:Retval',
-                <caproto.server.server.PvpropertyIntegerRO object at 0x104167550>),
-                ('rpc:get_random:Process',
-                <caproto.server.server.PvpropertyInteger object at 0x1041672e8>)])
-
-"Inline" Style Read and Write Customization
--------------------------------------------
-
-This example shows custom write and read behavior similar to what we have seen
-before, but implemented "inline" rather than siloed into a separate method.
-This may be useful, from a readability point of view, for implementing one-off
-behavior.
-
-.. literalinclude:: ../../caproto/ioc_examples/inline_style.py
-
-.. ipython:: python
-    :suppress:
-
-    run_example('caproto.ioc_examples.inline_style')
-
-.. code-block:: bash
-
-    $ python3 -m caproto.ioc_examples.inline_style --list-pvs
-    [I 18:47:05.344 server:93] Server starting up...
-    [I 18:47:05.346 server:109] Listening on 0.0.0.0:64443
-    [I 18:47:05.346 server:121] Server startup complete.
-    [I 18:47:05.346 server:123] PVs available:
-        inline_style:random_int
-        inline_style:random_str
-        inline_style:A
-
-.. ipython:: python
-
-    randint, randstr = ctx.get_pvs('inline_style:random_int', 'inline_style:random_str')
-    randint.read()
-    randint.read()
-    randint.read()
-    randstr.read()
-    randstr.read()
-    randstr.read()
-
 
 Mini-Beamline
 -------------
@@ -1310,12 +1259,12 @@ Simulate your own mini beamline with this IOC.
 .. autosummary::
     :toctree: generated
 
-    ~mini_beamline
-    ~mini_beamline.MiniBeamline
-    ~mini_beamline.PinHole
-    ~mini_beamline.Edge
-    ~mini_beamline.Slit
-    ~mini_beamline.MovingDot
+    caproto.ioc_examples.mini_beamline
+    caproto.ioc_examples.mini_beamline.MiniBeamline
+    caproto.ioc_examples.mini_beamline.PinHole
+    caproto.ioc_examples.mini_beamline.Edge
+    caproto.ioc_examples.mini_beamline.Slit
+    caproto.ioc_examples.mini_beamline.MovingDot
 
 
 More...
@@ -1328,10 +1277,10 @@ Take a look around
 .. autosummary::
     :toctree: generated
 
-    ~enums.EnumIOC
-    ~autosave.AutosavedSimpleIOC
-    ~decay.Decay
-    ~scan_rate.ScanRateIOC
+    caproto.ioc_examples.enums.EnumIOC
+    caproto.ioc_examples.autosave.AutosavedSimpleIOC
+    caproto.ioc_examples.decay.Decay
+    caproto.ioc_examples.scan_rate.ScanRateIOC
 
 
 .. ipython:: python
@@ -1346,7 +1295,7 @@ Take a look around
 Helpers
 =======
 
-caproto offers several "helper" subgroups (:class:`~caproto.server.SubGroup`)
+caproto offers several "helper" subgroups (:class:`~server.SubGroup`)
 that are of general use, and could be considered part of the "caproto server
 standard library", so to speak.
 
