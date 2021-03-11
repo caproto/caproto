@@ -559,46 +559,98 @@ Supported data types
 ``value`` may be an instance of one of the following, or ``dtype`` may be
 one of the following types:
 
-+--------------+--------------------+----------------+
-| Data   Type  | Data class         | Inherits from  |
-+==============+====================+================+
-| str          | PvpropertyChar     | ChannelChar    |
-+--------------+--------------------+----------------+
-| bytes        | PvpropertyByte     | ChannelByte    |
-+--------------+--------------------+----------------+
-| int          | PvpropertyInteger  | ChannelInteger |
-+--------------+--------------------+----------------+
-| float        | PvpropertyDouble   | ChannelDouble  |
-+--------------+--------------------+----------------+
-| bool         | PvpropertyBoolEnum | ChannelEnum    |
-+--------------+--------------------+----------------+
-| enum.IntEnum | PvpropertyEnum     | ChannelEnum    |
-+--------------+--------------------+----------------+
+.. currentmodule:: caproto
+
+.. list-table:: Built-in Data Type Mapping
+   :header-rows: 1
+
+   * - Data Type
+     - Data Class
+     - Inherits from
+   * - str
+     - :class:`~.server.PvpropertyChar`
+     - :class:`~.ChannelChar`
+   * - bytes
+     - :class:`~.server.PvpropertyByte`
+     - :class:`~.ChannelByte`
+   * - int
+     - :class:`~.server.PvpropertyInteger`
+     - :class:`~.ChannelInteger`
+   * - float
+     - :class:`~.server.PvpropertyDouble`
+     - :class:`~.ChannelDouble`
+   * - bool
+     - :class:`~.server.PvpropertyBoolEnum`
+     - :class:`~.ChannelEnum`
+   * - enum.IntEnum
+     - :class:`~.server.PvpropertyEnum`
+     - :class:`~.ChannelEnum`
 
 ``dtype`` may be omitted when a value is specified.
 
 If you desire finer-grained control over the data type provided (e.g., you
 specifically want a 32-bit float instead of a 64-bit double), you may
-use `ChannelType` directly:
+use the appropriate `ChannelType` directly:
+
+.. list-table:: Built-in Data Type Mapping
+   :header-rows: 1
+
+   * - ChannelType.STRING
+     - :class:`~.server.PvpropertyString`
+     - :class:`~.ChannelString`
+   * - ChannelType.INT
+     - :class:`~.server.PvpropertyShort`
+     - :class:`~.ChannelShort`
+   * - ChannelType.LONG
+     - :class:`~.server.PvpropertyInteger`
+     - :class:`~.ChannelInteger`
+   * - ChannelType.DOUBLE
+     - :class:`~.server.PvpropertyDouble`
+     - :class:`~.ChannelDouble`
+   * - ChannelType.FLOAT
+     - :class:`~.server.PvpropertyFloat`
+     - :class:`~.ChannelFloat`
+   * - ChannelType.ENUM
+     - :class:`~.server.PvpropertyEnum`
+     - :class:`~.ChannelEnum`
+   * - ChannelType.CHAR
+     - :class:`~.server.PvpropertyChar`
+     - :class:`~.ChannelChar`
+
+These are the special classes pvproperty uses:
+
+.. autosummary::
+    :toctree: generated
+
+    ~caproto.server.server.PvpropertyBoolEnum
+    ~caproto.server.server.PvpropertyByte
+    ~caproto.server.server.PvpropertyChar
+    ~caproto.server.server.PvpropertyDouble
+    ~caproto.server.server.PvpropertyEnum
+    ~caproto.server.server.PvpropertyFloat
+    ~caproto.server.server.PvpropertyInteger
+    ~caproto.server.server.PvpropertyShort
+    ~caproto.server.server.PvpropertyString
 
 
-+--------------------+-------------------+----------------+
-| Data   Type        | Data class        | Inherits from  |
-+====================+===================+================+
-| ChannelType.STRING | PvpropertyString  | ChannelString  |
-+--------------------+-------------------+----------------+
-| ChannelType.INT    | PvpropertyShort   | ChannelShort   |
-+--------------------+-------------------+----------------+
-| ChannelType.LONG   | PvpropertyInteger | ChannelInteger |
-+--------------------+-------------------+----------------+
-| ChannelType.DOUBLE | PvpropertyDouble  | ChannelDouble  |
-+--------------------+-------------------+----------------+
-| ChannelType.FLOAT  | PvpropertyFloat   | ChannelFloat   |
-+--------------------+-------------------+----------------+
-| ChannelType.ENUM   | PvpropertyEnum    | ChannelEnum    |
-+--------------------+-------------------+----------------+
-| ChannelType.CHAR   | PvpropertyChar    | ChannelChar    |
-+--------------------+-------------------+----------------+
+The following are the underlying, lowest-level classes for holding data which
+can be sent over an EPICS V3 channel in caproto:
+
+.. autosummary::
+    :toctree: generated
+
+    ~caproto.ChannelByte
+    ~caproto.ChannelChar
+    ~caproto.ChannelDouble
+    ~caproto.ChannelEnum
+    ~caproto.ChannelFloat
+    ~caproto.ChannelInteger
+    ~caproto.ChannelShort
+    ~caproto.ChannelString
+
+
+.. currentmodule:: caproto.server.server
+
 
 Integers and floats
 ^^^^^^^^^^^^^^^^^^^
@@ -946,6 +998,54 @@ to the first 40 characters of the string without any special modifiers to
 ... structure an IOC when talking to a real piece of hardware?
 --------------------------------------------------------------
 
+
+... get rid of PVGroup and pvproperty? I hate them!
+---------------------------------------------------
+
+Those are some strong words!
+
+caproto developers think the ease of customization and terseness of the class
+definition are positives - making it the easiest possible way to spin up an IOC
+- but we respect that it's not a one-size-fits-all approach.
+
+Let's rephrase the above as "How do I use the alternative methods of building
+IOCs?"
+
+The first option is to try working with ``PVSpec`` instances directly:
+
+(TODO)
+
+The second option is going down to the lowest level, working with
+``ChannelData`` instances directly:
+
+(TODO)
+
+
+... do some really crazy things with caproto?
+---------------------------------------------
+
+Take a look at the pathological IOC examples.  Take extra care not to run them
+in production!
+
+... handle records and what are the limitations there?
+------------------------------------------------------
+
+(TODO)
+
+... add a client to monitor other PVs?
+--------------------------------------
+
+(TODO)
+
+... get custom arguments into my IOC?
+-------------------------------------
+
+(TODO)
+
+... use macros? And what are macros?
+------------------------------------
+
+(TODO)
 
 
 Helpers
