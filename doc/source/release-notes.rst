@@ -25,7 +25,8 @@ Fixed
   bottleneck when pre-processing numpy arrays for ``ChannelByte`` instances.
   To avoid an additional copy on immutable data, set ``value.flags.writeable``
   to ``False`` when using compatible numpy arrays.  (#731)
-
+- ``safe_getsockname`` was stashing references to sockets and not allowing
+  them to be garbage collected. (#739)
 
 Added
 -----
@@ -51,7 +52,7 @@ Changed
   ``record=`` when upgrading to v0.8.0.
 - Efforts have been made to allow ``PVSpec`` to be used in a standalone
   fashion - i.e., without ``pvproperty``.  See the ``no_pvproperty`` IOC
-  example for further details.
+  example (``ioc_examples/advanced``) for further details.
 - asyncio-based transports have mostly been removed in favor of using a
   higher-level API provided by asyncio. This should allow for more precise
   and informative exception tracebacks.  This is now used for all asyncio
@@ -61,8 +62,11 @@ Changed
   code. (#734)
 - Improved hook method signature checker to include source code filename,
   line number, and suggested signature.  (#736)
-- Reworked IOC documentation and corresponding examples.  Some have been
-  moved around a bit.
+- Reworked IOC documentation and corresponding examples.
+- Old and bad form example ``all_in_one`` moved to testing area.
+- Old and bad form example ``inline_style`` moved to testing area.
+- Example using ChannelData ``type_varieties`` moved to "advanced"
+
 
 v0.7.1 (2020-01-13)
 ===================
