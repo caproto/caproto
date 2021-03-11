@@ -29,14 +29,6 @@ class Group(PVGroup):
         # NOTE: you can access the Group instance through obj.parent
         print(obj.parent)
 
-    # And the readback getter:
-    @pair.readback.getter
-    async def pair(obj, instance):
-        # NOTE: this is effectively a no-operation method
-        # that is, with or without this method definition, self.readback.value
-        # will be returned automatically
-        return obj.readback.value
-
 
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
