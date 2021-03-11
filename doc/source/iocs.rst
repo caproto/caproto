@@ -572,6 +572,42 @@ section.
 How do I...
 ===========
 
+... access ``async_lib`` directly in my class?
+----------------------------------------------
+
+If you have any startup hooks defined, you can stash ``async_lib`` there.
+
+.. code:: python
+
+    thing = pvproperty(value=2, doc="An integer-valued PV.")
+
+    @thing.startup
+    async def thing(self, instance, async_lib):
+        self.async_lib = async_lib
+
+
+Or more generally, you can pass a ``startup_hook`` independent of any
+``pvproperty`` by way of ``run()``:
+
+.. code:: python
+
+    class StartupAndShutdown(PVGroup):
+        async def __ainit__(self, async_lib):
+            self.log.warning("1. The IOC-level startup_hook from `run()` was called.")
+            # Note that we have to pass this in to ``run()``!
+
+    if __name__ == '__main__':
+        ioc_options, run_options = ioc_arg_parser(
+            default_prefix='simple:',
+            desc="Run an IOC that prints on startup and shutdown.")
+        ioc = StartupAndShutdown(**ioc_options)
+        run(ioc.pvdb, startup_hook=ioc.__ainit__, **run_options)
+
+As an convention, consider naming your method ``__ainit__``.
+
+See the full IOC example in ``startup_and_shutdown_hooks``.
+
+
 ... make a string PV? All I see is an array of numbers!
 -------------------------------------------------------
 
