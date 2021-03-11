@@ -1090,9 +1090,6 @@ class ShowVersionAction(argparse.Action):
         parser.exit()
 
 
-# TODO: this should be revisited
-# TODO: this LRU cache holds hard references of socket instances.
-@functools.lru_cache(maxsize=128)
 def safe_getsockname(sock):
     """
     Call sock.getsockname() and, on Windows, return ('0.0.0.0', 0) if an error is raised.
