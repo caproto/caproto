@@ -7,17 +7,21 @@ from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 class SkipWriteIOC(PVGroup):
     """
-    An IOC with a single scalar PV.
+    An IOC with a single scalar PV that uses SkipWrite.
 
     Scalar PVs
     ----------
     value (int)
     """
-    value = pvproperty(value=1, doc='An integer')
+    value = pvproperty(
+        value=1,
+        doc='An integer - I may only have the value "85"!',
+    )
 
     @value.putter
     async def value(self, instance, value):
-        if instance.value != 85:
+        if value != 85:
+            print(f"Sorry, I like the magic number 85, not {value}.")
             # verify_value=False will avoid recursion into this putter method:
             await instance.write(85, verify_value=False)
 
