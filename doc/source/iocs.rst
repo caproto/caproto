@@ -810,6 +810,64 @@ The second option is going down to the lowest level, working with
 (TODO)
 
 
+... represent both the setpoint and readback with one pvproperty?
+-----------------------------------------------------------------
+
+EPICS V3 records mostly do not have support for this, and caproto does not try
+to improve upon the status quo.
+
+A common convention -- areaDetector-style -- where there are 2 PVs, one
+for the setpoint and one for the readback looks like the following:
+
+.. code::
+
+    SYSTEM:Value
+    SYSTEM:Value_RBV
+
+
+Where ``SYSTEM:Value`` is the setpoint, and ``SYSTEM:Value_RBV`` is the
+"read-back value" that updates only after the server (or device) has
+acknowledged it.
+
+caproto provides a simple helper tool to replicate this pattern efficiently.
+Using `.get_pv_pair_wrapper`, one can dynamically generate a ``SubGroup``
+that contains both the setpoint and readback PVs.  This wrapper is
+re-usable and may be used to generate any number of such pairs.
+
+.. code:: python
+
+    pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix='',
+                                              readback_suffix='_RBV')
+
+    value = pvproperty_with_rbv(
+        name="Value",
+        value=0,
+        doc="This is a new subgroup with Value and Value_RBV.",
+    )
+
+    @value.setpoint.putter
+    async def value(obj, instance, value):
+        # accept the value immediately
+        await obj.readback.write(value)
+        # NOTE: you can access the full Group instance through obj.parent
+
+
+You can further customize the setpoint and readback keyword arguments
+by using ``setpoint_kw`` and ``readback_kw``. For example, you can
+set different record types by specifying ``setpoint_kw=dict(record="ao")``.
+
+.. autosummary::
+    :toctree: generated
+
+    get_pv_pair_wrapper
+
+
+.. note::
+
+    The API of this changed in v0.7.0, making it easier to pass in class
+    kwargs.
+
+
 ... do some really crazy things with caproto?
 ---------------------------------------------
 
