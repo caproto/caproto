@@ -944,6 +944,16 @@ asyncio-only:
     caproto.ioc_examples.client_monitor_async.MirrorClientIOC
 
 
+To work directly with the asyncio client context, you might consider basing
+your IOC on the following example instead:
+
+.. literalinclude:: ../../caproto/ioc_examples/mirror.py
+
+.. autosummary::
+    :toctree: generated
+
+    caproto.ioc_examples.mirror.Mirror
+
 
 ... get custom arguments into my IOC?
 -------------------------------------
