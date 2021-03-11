@@ -830,7 +830,7 @@ Where ``SYSTEM:Value`` is the setpoint, and ``SYSTEM:Value_RBV`` is the
 acknowledged it.
 
 caproto provides a simple helper tool to replicate this pattern efficiently.
-Using `.get_pv_pair_wrapper`, one can dynamically generate a ``SubGroup``
+Using :func:`.get_pv_pair_wrapper`, one can dynamically generate a ``SubGroup``
 that contains both the setpoint and readback PVs.  This wrapper is
 re-usable and may be used to generate any number of such pairs.
 
@@ -877,7 +877,17 @@ in production!
 ... handle records and what are the limitations there?
 ------------------------------------------------------
 
-(TODO)
+For any given pvproperty, you can specify a caproto-supported record type by
+way of the ``record=''`` keyword argument.
+
+Please note that none of the classes listed here implement the full
+functionality of the corresponding record, but make available over Channel
+Access all of the fields one would normally expect from that record.
+
+That said, some functionality is provided out-of-the-box, and you can further
+customize this functionality in your own implementations.
+
+See the `records <records_section>`_ section for further details.
 
 ... add a client to monitor other PVs?
 --------------------------------------
