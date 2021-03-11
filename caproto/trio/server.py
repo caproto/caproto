@@ -240,7 +240,7 @@ class Context(_Context):
         finally:
             listen_sock.close()
 
-    async def run(self, *, log_pv_names=False):
+    async def run(self, *, log_pv_names=False, startup_hook=None):
         'Start the server'
         self.log.info('Trio server starting up...')
         try:
@@ -272,14 +272,25 @@ class Context(_Context):
                                              listen_sock)
 
                 async_lib = TrioAsyncLayer()
+
+                if startup_hook is not None:
+                    self.log.debug('Calling startup hook %r',
+                                   startup_hook.__name__)
+
+                    async def _startup(task_status):
+                        task_status.started()
+                        await startup_hook(async_lib)
+
+                    await self.nursery.start(_startup)
+
                 for name, method in self.startup_methods.items():
                     self.log.debug('Calling startup method %r', name)
 
-                    async def startup(task_status):
+                    async def _startup(task_status):
                         task_status.started()
                         await method(async_lib)
 
-                    await self.nursery.start(startup)
+                    await self.nursery.start(_startup)
                 self.log.info('Server startup complete.')
                 if log_pv_names:
                     self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
@@ -313,15 +324,35 @@ class Context(_Context):
         nursery.cancel_scope.cancel()
 
 
-async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
+async def start_server(pvdb, *, interfaces=None, log_pv_names=False,
+                       startup_hook=None):
     '''Start a trio server with a given PV database'''
     ctx = Context(pvdb, interfaces=interfaces)
-    return (await ctx.run(log_pv_names=log_pv_names))
+    return await ctx.run(
+        log_pv_names=log_pv_names,
+        startup_hook=startup_hook
+    )
 
 
-def run(pvdb, *, interfaces=None, log_pv_names=False):
+def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
     """
+    Run an IOC, given its PV database dictionary.
+
     A synchronous function that runs server, catches KeyboardInterrupt at exit.
+
+    Parameters
+    ----------
+    pvdb : dict
+        The PV database.
+
+    interfaces : list, optional
+        List of interfaces to listen on.
+
+    log_pv_names : bool, optional
+        Log PV names at startup.
+
+    startup_hook : coroutine, optional
+        Hook to call at startup with the ``async_lib`` shim.
     """
     try:
         return trio.run(
@@ -329,6 +360,8 @@ def run(pvdb, *, interfaces=None, log_pv_names=False):
                 start_server,
                 pvdb,
                 interfaces=interfaces,
-                log_pv_names=log_pv_names))
+                log_pv_names=log_pv_names,
+                startup_hook=startup_hook,
+            ))
     except KeyboardInterrupt:
         return
