@@ -11,6 +11,7 @@ from caproto import (CaprotoKeyError, CaprotoNetworkError, CaprotoRuntimeError,
                      ChannelType, RemoteProtocolError, apply_arr_filter,
                      get_environment_variables)
 
+from .._constants import MAX_UDP_RECV
 from .._dbr import SubscriptionType, _LongStringChannelType
 
 # ** Tuning this parameters will affect the servers' performance **
@@ -149,8 +150,13 @@ class VirtualCircuit:
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
             # send bytes over the wire using some caproto utilities
-            async with self._raw_lock:
-                await ca.async_send_all(buffers_to_send, self.client.sendmsg)
+            try:
+                async with self._raw_lock:
+                    await ca.async_send_all(buffers_to_send, self.client.sendmsg)
+            except (OSError, CaprotoNetworkError) as ex:
+                raise DisconnectedCircuit(
+                    f"Circuit disconnected: {ex}"
+                ) from ex
 
     async def recv(self):
         """
@@ -732,7 +738,9 @@ class Context:
     async def _core_broadcaster_loop(self, udp_sock):
         while True:
             try:
-                bytes_received, address = await udp_sock.recvfrom(4096 * 16)
+                bytes_received, address = await udp_sock.recvfrom(
+                    MAX_UDP_RECV
+                )
             except OSError:
                 self.log.exception('UDP server recvfrom error')
                 await self.async_layer.library.sleep(0.1)
@@ -767,7 +775,6 @@ class Context:
             except Exception as ex:
                 self.log.exception('Broadcaster command queue evaluation failed',
                                    exc_info=ex)
-                continue
 
     def __iter__(self):
         # Implemented to support __getitem__ below

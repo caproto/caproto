@@ -7,32 +7,30 @@
 # Requests; a ServerChannel provides convenience methods for composing
 # Responses.
 import logging
+import os
 from collections import deque
 from collections.abc import Iterable
-import os
 
-from ._commands import (AccessRightsResponse, CreateChFailResponse,
-                        ClearChannelRequest, ClearChannelResponse,
-                        ClientNameRequest, CreateChanRequest,
-                        CreateChanResponse, EventAddRequest, EventAddResponse,
-                        EventCancelRequest, EventCancelResponse,
-                        HostNameRequest, ReadNotifyRequest,
-                        ReadRequest, ReadNotifyResponse, ReadResponse,
-                        SearchResponse, ServerDisconnResponse,
+from ._commands import (AccessRightsResponse, ClearChannelRequest,
+                        ClearChannelResponse, ClientNameRequest,
+                        CreateChanRequest, CreateChanResponse,
+                        CreateChFailResponse, EventAddRequest,
+                        EventAddResponse, EventCancelRequest,
+                        EventCancelResponse, HostNameRequest,
+                        ReadNotifyRequest, ReadNotifyResponse, ReadRequest,
+                        ReadResponse, SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
                         WriteNotifyResponse, WriteRequest,
-                        read_from_bytestream,)
-from ._state import (ChannelState, CircuitState, get_exception)
-from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
-                     CaprotoValueError, CaprotoRuntimeError, CaprotoError,
-                     CaprotoTypeError,
-                     parse_channel_filter, parse_record_field,
-                     ChannelFilter, ThreadsafeCounter)
-from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
+                        read_from_bytestream)
 from ._constants import DEFAULT_PROTOCOL_VERSION
+from ._dbr import ChannelType, SubscriptionType, field_types, native_type
 from ._log import ComposableLogAdapter
+from ._state import ChannelState, CircuitState, get_exception
 from ._status import CAStatus
-
+from ._utils import (CLIENT, DISCONNECTED, NEED_DATA, SERVER, CaprotoError,
+                     CaprotoKeyError, CaprotoRuntimeError, CaprotoTypeError,
+                     CaprotoValueError, ChannelFilter, ThreadsafeCounter,
+                     parse_channel_filter, parse_record_field)
 
 __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
            'extract_address')
@@ -188,7 +186,7 @@ class VirtualCircuit:
         total_received = sum(len(byteslike) for byteslike in buffers)
         commands = deque()
         if total_received == 0:
-            self.log.debug('Zero-length recv; sending disconnect notification')
+            self.log.debug('Circuit disconnected')
             commands.append(DISCONNECTED)
             return commands, 0
         self._data += b''.join(buffers)
