@@ -10,15 +10,23 @@ pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix='',
 
 class Group(PVGroup):
     # Creates {prefix}pair and {prefix}pair_RBV
-    pair = pvproperty_with_rbv(dtype=int, doc='This is the first pair')
+    pair = pvproperty_with_rbv(
+        dtype=int,
+        doc='This is the first pair, of data type int',
+    )
     # Creates {prefix}pair2 and {prefix}pair2_RBV
-    pair2 = pvproperty_with_rbv(dtype=float, doc='This is pair2')
+    pair2 = pvproperty_with_rbv(
+        dtype=float,
+        doc='pair2 has a separate data type of float'
+    )
     # Creates {prefix}pair3 and {prefix}pair3_RBV
-    pair3 = pvproperty_with_rbv(dtype=ChannelType.ENUM, doc='This is pair3',
-                                enum_strings=['No', 'Yes'],
-                                setpoint_kw=dict(record='bo'),
-                                readback_kw=dict(record='bi'),
-                                )
+    pair3 = pvproperty_with_rbv(
+        dtype=ChannelType.ENUM,
+        doc='Setpoint is a "bo" record; readback is a "bi" record.',
+        enum_strings=['No', 'Yes'],
+        setpoint_kw=dict(record='bo'),
+        readback_kw=dict(record='bi'),
+    )
 
     # We can then directly decorate our functions with the putters from the
     # setpoint:
