@@ -6,20 +6,29 @@ from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 class SimpleIOC(PVGroup):
     """
-    An IOC with three uncoupled read/writable PVs
+    An IOC with three uncoupled read/writable PVs.
 
     Scalar PVs
     ----------
     A (int)
     B (float)
 
-    Vectors PVs
-    -----------
-    C (vector of int)
+    Array PVs
+    ---------
+    C (array of int)
     """
-    A = pvproperty(value=1, doc='An integer')
-    B = pvproperty(value=2.0, doc='A float')
-    C = pvproperty(value=[1, 2, 3], doc='An array of integers')
+    A = pvproperty(
+        value=1,
+        doc='An integer',
+    )
+    B = pvproperty(
+        value=2.0,
+        doc='A float'
+    )
+    C = pvproperty(
+        value=[1, 2, 3],
+        doc='An array of integers (max length 3)'
+    )
 
 
 if __name__ == '__main__':
