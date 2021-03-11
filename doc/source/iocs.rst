@@ -377,6 +377,14 @@ Note that in the above, ``self`` will refer to the ``PVGroup`` instance.
 It will allow you to access the values of other PVs in the group, or any
 other state held within.
 
+
+``instance`` here is the ChannelData-based instance of ``my_property``.
+It is exactly equivalent to ``self.my_property`` in the above example.  This
+object holds the current value, alarm instance, and other associated metadata.
+
+Since ``putter`` methods may be reused among any number of ``pvproperty``
+instances, this parameter can be used generically in such scenarios.
+
 The ``value`` can be assumed to be consistent with the data type of
 ``my_property``.  In the above case, this is ``int`` (as ``0`` is an integer).
 
@@ -468,7 +476,7 @@ configuration.
 .. code:: python
 
     @my_property.scan(period=0.1)
-    async def my_property(self, instance):
+    async def my_property(self, instance, async_lib):
         """
         Scan hook for ``my_property``.
 
@@ -476,6 +484,10 @@ configuration.
         ----------
         instance : ChannelData
             This is the instance of ``my_property``.
+
+        async_lib : AsyncLibraryLayer
+            This is a shim layer for {asyncio, curio, trio} that you can use
+            to make async library-agnostic IOCs.
         """
         ...
 
@@ -520,6 +532,39 @@ API
 General Tips
 ============
 
+Don't use a getter
+------------------
+
+Generally speaking, you should not define a getter. This goes back to original
+design decisions for how ``pvproperty`` instances could work. The authors
+now know that this was a mistake to make easily accessible.
+
+Why?
+^^^^
+
+Inclusion of a getter can unfortunately make value monitoring less intuitive at
+best, or break its functionality at worst.
+
+There is no way to monitor such a value for changes, as it requires calling
+the getter to determine the current value.
+
+Each time a user runs ``caget YOUR:PV``, the getter will be called. If the
+getter performs a write to update the instance, all other clients watching
+``YOUR:PV`` will then see an update. The more clients added to the mix, the
+more frequent that other clients will see updates - seemingly at arbitrary
+times.
+
+Reactive design
+---------------
+
+Most of what your IOC does should be in response to what the user requests by
+way of ``putter`` hooks.
+
+Periodic updates should happen in ``scan`` loops.
+
+If PVGroup data is sourced from a database, real device, website, etc,
+then a different approach may be more appropriate.  See below in the "how do I"
+section.
 
 How do I...
 ===========
@@ -603,6 +648,106 @@ to the first 40 characters of the string without any special modifiers to
 ... structure an IOC when talking to a real piece of hardware?
 --------------------------------------------------------------
 
+When talking to a single device and requesting a bunch of different information
+from it to update a single ``PVGroup`` to represent its status, we recommend
+the inclusion of a polling loop.
+
+For a simple "query device and update state"-style group, this could look like:
+
+.. code:: python
+
+    update_hook = pvproperty(name="update", value=False, record='bi')
+
+    @update_hook.scan(period=0.1, use_scan_field=True)
+    async def update_hook(self, instance):
+        """
+        Scan hook for ``update_hook``.
+
+        Parameters
+        ----------
+        instance : ChannelData
+            This is the instance of ``update_hook``.
+
+        async_lib : AsyncLibraryLayer
+            This is a shim layer for {asyncio, curio, trio} that you can use
+            to make async library-agnostic IOCs.
+        """
+        # Reach out to the device asynchronously and get back information:
+        device_info = await query_device()
+        await self.value1.write(value=device_info["value1"])
+        await self.value2.write(value=device_info["value2"])
+        await self.value3.write(value=device_info["value3"])
+
+
+With the above, the client has some control over how fast the updates happen.
+If that's undesirable, set ``period=desired_rate`` and ``use_scan_field=False``
+
+If you don't have an async-capable interface, there will be some additional
+work required.
+
+(TODO)
+
+If, instead, you have a bunch of knobs that the user can set with some
+control flow decisions to make, instead consider something like:
+
+.. code:: python
+
+    update_hook = pvproperty(name="update", value=False, record='bi')
+
+    @update_hook.startup
+    async def update_hook(self, instance, async_lib):
+        """
+        Startup hook for ``update_hook``.
+
+        Parameters
+        ----------
+        instance : ChannelData
+            This is the instance of ``update_hook``.
+
+        async_lib : AsyncLibraryLayer
+            This is a shim layer for {asyncio, curio, trio} that you can use
+            to make async library-agnostic IOCs.
+        """
+        while True:
+            device_info = await query_device()
+            await self.value1.write(value=device_info["value1"])
+            if self.user_requested.value == 'move':
+                await self.queue_move()
+            ...
+            await async_lib.sleep(update_delay)
+
+
+A more concrete example with aiohttp:
+
+.. code:: python
+
+    @update_hook.scan(period=5)
+    async def update_hook(self, instance, async_lib):
+        try:
+            try:
+                await self._update_server_state()
+                if self._should_download():
+                    await self._download_and_update()
+            except (asyncio.TimeoutError,
+                    aiohttp.client_exceptions.ClientConnectorError):
+                self._consecutive_timeouts += 1
+                self.log.warning('Timeout while updating server (%d in a row)',
+                                 self._consecutive_timeouts)
+                if self._consecutive_timeouts >= 6:
+                    self.log.error('Too many consecutive timeouts!')
+                    self._consecutive_timeouts = 0
+                    raise
+            else:
+                self._consecutive_timeouts = 0
+        except Exception:
+            self.log.exception('Update failed!')
+            for key, alarm in self.alarms.items():
+                if key is not None:
+                    await alarm.write(
+                        status=AlarmStatus.COMM,
+                        severity=AlarmSeverity.MAJOR_ALARM,
+                    )
+
 
 ... get rid of PVGroup and pvproperty? I hate them!
 ---------------------------------------------------
@@ -651,6 +796,26 @@ in production!
 ------------------------------------
 
 (TODO)
+
+... make a bunch of caproto IOCs without all the boilerplate?
+-------------------------------------------------------------
+
+Take a look at the cookiecutters.
+
+... get a structured view of my PVGroup on the client side?
+-----------------------------------------------------------
+
+(This is a shameless plug for our other free tools...)
+
+Consider trying `ophyd <https://blueskyproject.io/>`_. devices as the
+client-side interface to your server-side caproto IOC.
+
+If you buy into this ecosystem, you will be able to:
+
+* Use your caproto-backed PVs in scans and other data acquisition routines
+  by way of bluesky
+* Auto-generate EPICS user interfaces with Typhos and PyDM
+* Track and organize your devices by way of happi
 
 
 .. currentmodule:: caproto.ioc_examples
