@@ -193,9 +193,12 @@ If you desire finer-grained control over the data type provided (e.g., you
 specifically want a 32-bit float instead of a 64-bit double), you may
 use the appropriate `ChannelType` directly:
 
-.. list-table:: Built-in Data Type Mapping
+.. list-table:: ChannelType Mapping
    :header-rows: 1
 
+   * - Data Type
+     - Data Class
+     - Inherits from
    * - ChannelType.STRING
      - :class:`~.server.PvpropertyString`
      - :class:`~.ChannelString`
