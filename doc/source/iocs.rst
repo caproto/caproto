@@ -699,7 +699,7 @@ For a simple "query device and update state"-style group, this could look like:
     update_hook = pvproperty(name="update", value=False, record='bi')
 
     @update_hook.scan(period=0.1, use_scan_field=True)
-    async def update_hook(self, instance):
+    async def update_hook(self, instance, async_lib):
         """
         Scan hook for ``update_hook``.
 
@@ -723,9 +723,37 @@ With the above, the client has some control over how fast the updates happen.
 If that's undesirable, set ``period=desired_rate`` and ``use_scan_field=False``
 
 If you don't have an async-capable interface, there will be some additional
-work required.
+work required.  Consider using async_lib queues for this.
 
-(TODO)
+.. code:: python
+
+    update_hook = pvproperty(name="update", value=False, record='bi')
+
+    @update_hook.startup
+    async def update_hook(self, instance, async_lib):
+        """
+        Startup hook for ``update_hook``.
+
+        Parameters
+        ----------
+        instance : ChannelData
+            This is the instance of ``update_hook``.
+
+        async_lib : AsyncLibraryLayer
+            This is a shim layer for {asyncio, curio, trio} that you can use
+            to make async library-agnostic IOCs.
+        """
+        queue = async_lib.ThreadsafeQueue()
+        thread = threading.Thread(target=my_threaded_function, kwargs=dict(queue=queue))
+        thread.start()
+
+        try:
+            while True:  # or perhaps thread.is_alive()
+                value = await queue.async_get()
+                await self.prop.write(value=value["prop"])
+        finally:
+            ...  # perform cleanup here
+
 
 If, instead, you have a bunch of knobs that the user can set with some
 control flow decisions to make, instead consider something like:
