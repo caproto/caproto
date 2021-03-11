@@ -984,12 +984,18 @@ caproto will not complain.
 ... use macros? And what are macros?
 ------------------------------------
 
-(TODO)
+Macros allow you to specify portions of PV names at IOC initialization-time
+instead of at PVGroup/pvproperty definition time.
+
+Macros can be used in addition to - or in place of - the default PV prefix.
+
+See the :class:`~.ioc_examples.macros.MacroifiedNames` for an example.
 
 ... make a bunch of caproto IOCs without all the boilerplate?
 -------------------------------------------------------------
 
-Take a look at the cookiecutters.
+Take a look at the cookiecutters.  You can generate a full Python package IOC
+template along with a startup script template pretty quickly with this tool.
 
 ... get a structured view of my PVGroup on the client side?
 -----------------------------------------------------------
@@ -1220,7 +1226,7 @@ The help string for this IOC contains two extra entries at the bottom:
     usage: macros.py [-h] [--prefix PREFIX] [-q | -v] [--list-pvs]
                     [--async-lib {asyncio,curio,trio}]
                     [--interfaces INTERFACES [INTERFACES ...]]
-                    [--beamline BEAMLINE] [--thing THING]
+                    [--beamline BEAMLINE] [--suffix SUFFIX]
 
     Run an IOC with PVs that have macro-ified names.
 
@@ -1229,11 +1235,11 @@ The help string for this IOC contains two extra entries at the bottom:
     <...snipped...>
 
     --beamline BEAMLINE   Macro substitution, optional
-    --thing THING         Macro substitution, optional
+    --suffix SUFFIX       Macro substitution, optional
 
 .. code-block:: bash
 
-    $ python3 -m caproto.ioc_examples.macros --beamline XF31ID --thing detector --list-pvs
+    $ python3 -m caproto.ioc_examples.macros --beamline XF31ID --suffix detector --list-pvs
     [I 18:44:39.528 server:93] Server starting up...
     [I 18:44:39.530 server:109] Listening on 0.0.0.0:56365
     [I 18:44:39.531 server:121] Server startup complete.
@@ -1244,7 +1250,7 @@ The help string for this IOC contains two extra entries at the bottom:
 .. ipython:: python
     :suppress:
 
-    run_example('caproto.ioc_examples.macros', '--beamline', 'XF31ID', '--thing', 'detector')
+    run_example('caproto.ioc_examples.macros', '--beamline', 'XF31ID', '--suffix', 'detector')
 
 .. ipython:: python
 
