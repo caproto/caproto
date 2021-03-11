@@ -234,6 +234,11 @@ class PvpropertyData:
         value = await super().verify_value(value)
         return await self.putter(self, value)
 
+    async def update_fields(self, value):
+        """This is a hook to update field instance data."""
+        if self.field_inst is not None:
+            await self.field_inst.value_write_hook(self, value)
+
     async def _server_startup(self, async_lib):
         """A per-pvproperty startup hook; enabled at __init__ time."""
         return await self.startup(self, async_lib)

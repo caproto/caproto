@@ -502,11 +502,9 @@ class ChannelData:
                 modified_value = None
 
             if update_fields:
-                field_inst = getattr(self, 'field_inst', None)
-                if field_inst is not None:
-                    await field_inst.value_write_hook(
-                        self, modified_value if verify_value else value
-                    )
+                await self.update_fields(
+                    modified_value if verify_value else value
+                )
         except SkipWrite:
             # Handler raised SkipWrite to avoid the rest of this method.
             return
@@ -551,6 +549,9 @@ class ChannelData:
     def _is_eligible(self, ss):
         sync = ss.channel_filter.sync
         return sync is None or sync.m in self._snapshots[sync.s]
+
+    async def update_fields(self, value):
+        """This is a hook for subclasses to update field instance data."""
 
     async def publish(self, flags):
         # Each SubscriptionSpec specifies a certain data type it is interested
