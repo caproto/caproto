@@ -127,7 +127,7 @@ group_write
 By default, if an explicit putter hook is not supplied for a given
 `.pvproperty`, an implicit one defined in the group will be used.
 
-.. python::
+.. code:: python
 
     class MyGroup(PVGroup):
         async def group_write(self, instance, value):
