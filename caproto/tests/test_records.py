@@ -1,13 +1,12 @@
 import pytest
-import caproto
+
+from caproto import AlarmSeverity, AlarmStatus, ChannelType
+from caproto.sync.client import read, write
+from caproto.threading.pyepics_compat import get_pv
 
 from .conftest import run_example_ioc
-from caproto.threading.pyepics_compat import get_pv
-from caproto.sync.client import read, write
-from caproto import AlarmSeverity, AlarmStatus, ChannelType
-from .test_threading_client import (
-    context as _context,
-    shared_broadcaster as _sb)
+from .test_threading_client import context as _context
+from .test_threading_client import shared_broadcaster as _sb
 
 context = _context
 shared_broadcaster = _sb
@@ -89,25 +88,3 @@ def test_alarms(request, prefix, sevr_target, sevr_value, context):
         ctrl_vars = PV.get_ctrlvars()
         assert ctrl_vars['status'] == a_status
         assert ctrl_vars['severity'] == a_sevr
-
-
-def test_mock_deprecation():
-    class TestIOC(caproto.server.PVGroup):
-        # Specify both `mock_record` and `record` -> ValueError
-        ai = caproto.server.pvproperty(value=0.0, mock_record='ai',
-                                       record='ai')
-
-    with pytest.raises(ValueError):
-        TestIOC(prefix='a')
-
-    class TestIOC(caproto.server.PVGroup):
-        ai = caproto.server.pvproperty(value=0.0, mock_record='ai')
-
-    ioc = TestIOC(prefix='a')
-    assert ioc.ai.record_type == 'ai'
-
-    class TestIOC(caproto.server.PVGroup):
-        ai = caproto.server.pvproperty(value=0.0, record='ai')
-
-    ioc = TestIOC(prefix='a')
-    assert ioc.ai.record_type == 'ai'

@@ -363,7 +363,10 @@ class SharedBroadcaster:
     def _should_attempt_registration(self):
         'Whether or not a registration attempt should be tried'
         if self.udp_sock is None:
-            return True
+            # This broadcaster does not currently support being revived from
+            # a disconnected state.  Do not attempt registration if the
+            # __init__-defined socket has been removed.
+            return False
 
         if (self.broadcaster.registered or
                 self._registration_retry_time is None):
@@ -1222,10 +1225,6 @@ class Context:
             # clear any state about circuits and search results
             self.log.debug('Clearing circuit managers')
             self.circuit_managers.clear()
-
-            # disconnect the underlying state machine
-            self.broadcaster.remove_listener(self)
-            # (TODO) double remove0
 
             self.log.debug("Stopping SelectorThread of the context")
             self.selector.stop()

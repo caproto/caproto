@@ -48,7 +48,7 @@ def _parse_dbr_metadata(dbr_data):
                'lower_alarm_limit': 'lower_alarm_limit',
                'upper_ctrl_limit': 'upper_ctrl_limit',
                'lower_ctrl_limit': 'lower_ctrl_limit',
-               'strs': 'enum_strs',
+               'enum_strings': 'enum_strs',
                # 'secondsSinceEpoch': 'posixseconds',
                # 'nanoSeconds': 'nanoseconds',
                }
@@ -58,8 +58,9 @@ def _parse_dbr_metadata(dbr_data):
             ret[arg] = getattr(dbr_data, attr)
 
     if ret.get('enum_strs', None):
-        ret['enum_strs'] = tuple(k.value.decode(STR_ENC) for
-                                 k in ret['enum_strs'] if k.value)
+        ret['enum_strs'] = tuple(
+            k.decode(STR_ENC) for k in ret['enum_strs']
+        )
 
     if hasattr(dbr_data, 'nanoSeconds'):
         ret['posixseconds'] = dbr_data.secondsSinceEpoch
@@ -74,7 +75,7 @@ def _parse_dbr_metadata(dbr_data):
     return ret
 
 
-def _read_response_to_pyepics(full_type, command):
+def _read_response_to_pyepics(full_type, command, enum_strings=None):
     'Parse a ReadResponse command into a pyepics-friendly dict'
     info = _parse_dbr_metadata(command.metadata)
 
@@ -90,6 +91,20 @@ def _read_response_to_pyepics(full_type, command):
         if len(value) == 1:
             value = value[0]
         info['char_value'] = value
+    elif full_type in ca.enum_types:
+        enum_strings = info.get('enum_strs', None) or enum_strings
+        if enum_strings is None:
+            # This None marker will allow get_ctrlvars to be automatically
+            # called later through `_getarg()` magic.
+            char_value = [None] * len(value)
+        else:
+            char_value = [
+                enum_strings[idx] if 0 <= idx < len(enum_strings) else ''
+                for idx in value
+            ]
+        if len(char_value) == 1:
+            char_value = char_value[0]
+        info['char_value'] = char_value
     else:
         info['char_value'] = None
 
@@ -440,7 +455,9 @@ class PV:
                 (count is not None and count > len(cached_value))):
             command = self._caproto_pv.read(data_type=dt, data_count=count,
                                             timeout=timeout)
-            response = _read_response_to_pyepics(self.typefull, command)
+            response = _read_response_to_pyepics(
+                self.typefull, command, enum_strings=self._args['enum_strs']
+            )
             self._args.update(**response)
             md.update(**response)
 
@@ -549,29 +566,31 @@ class PV:
         self._caproto_pv.write(value, wait=wait, callback=run_callback,
                                timeout=timeout, notify=notify)
 
+    def _read_and_update(self, dtype, timeout):
+        """Read the caproto PV with `dtype` and update state _args."""
+        command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
+        info = _read_response_to_pyepics(
+            dtype, command, enum_strings=self._args['enum_strs']
+        )
+        self._args.update(**info)
+        return command, info
+
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
-        dtype = field_types['control'][self.type]
-        command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
-        info = _parse_dbr_metadata(command.metadata)
-        value = command.data
-        info['raw_value'] = value
-        info['value'] = _scalarify(value, command.data_type, command.data_count)
-        self._args.update(**info)
+        _, info = self._read_and_update(
+            field_types['control'][self.type], timeout
+        )
         self.force_read_access_rights()
         return info
 
     @ensure_connection
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
-        dtype = field_types['time'][self.type]
-        command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
-        info = _parse_dbr_metadata(command.metadata)
-        value = command.data
-        info['raw_value'] = value
-        info['value'] = _scalarify(value, command.data_type, command.data_count)
-        self._args.update(**info)
+        _, info = self._read_and_update(
+            field_types['time'][self.type], timeout
+        )
+        return info
 
     @ensure_connection
     def force_read_access_rights(self):
@@ -601,8 +620,9 @@ class PV:
         To have user-defined code run when the PV value changes,
         use add_callback()
         """
-        info = _read_response_to_pyepics(self.typefull, command)
-
+        info = _read_response_to_pyepics(
+            self.typefull, command, enum_strings=self._args['enum_strs']
+        )
         self._args.update(**info)
         self.run_callbacks()
 
@@ -1020,24 +1040,33 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     while pending_pvs:
         for pv in list(pending_pvs):
             if pv.connected:
-                readings[pv] = pv.read()
+                readings[pv] = pv.read(data_type='control')
                 pending_pvs.remove(pv)
         time.sleep(0.01)
 
     get_kw = dict(as_string=as_string,
                   as_numpy=as_numpy,
                   requested_count=count,
-                  enum_strings=None,  # TODO?
                   )
 
     def final_get(pv):
-        full_type = pv.channel.native_data_type
-        info = _read_response_to_pyepics(full_type=full_type,
-                                         command=readings[pv])
+        # Use "DBR_CTRL_*" so that we can get enum strings, if necessary.
+        full_type = field_types['control'][pv.channel.native_data_type]
+        enum_strings = getattr(readings[pv].metadata, "enum_strings", None)
+        if enum_strings:
+            enum_strings = [
+                enum_str.decode(STR_ENC) for enum_str in enum_strings
+            ]
+        info = _read_response_to_pyepics(
+            full_type=full_type,
+            command=readings[pv],
+            enum_strings=enum_strings,
+        )
         return _pyepics_get_value(value=info['raw_value'],
                                   string_value=info['char_value'],
                                   full_type=pv.channel.native_data_type,
                                   native_count=pv.channel.native_data_count,
+                                  enum_strings=enum_strings,
                                   **get_kw)
     return [final_get(pv) for pv in pvs]
 

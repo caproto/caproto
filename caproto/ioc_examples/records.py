@@ -76,6 +76,9 @@ if __name__ == '__main__':
 
     print('Custom field specifications of A:', RecordMockingIOC.A.fields)
     print('Custom field specifications of B:', RecordMockingIOC.B.fields)
+    print('Custom field specifications of C:', RecordMockingIOC.C.fields)
+    print('Custom field specifications of D:', RecordMockingIOC.D.fields)
+    print('Custom field specifications of E:', RecordMockingIOC.E.fields)
 
     # Run IOC.
     run(ioc.pvdb, **run_options)

@@ -680,19 +680,6 @@ class DBR_CTRL_ENUM(GraphicControlBase, _EnumWithStrings):
         ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
     ]
 
-    @property
-    def enum_strings(self):
-        '''Enum byte strings as a tuple'''
-        return tuple(self.strs[i].value
-                     for i in range(self.no_str))
-
-    @enum_strings.setter
-    def enum_strings(self, enum_strings):
-        for i, bytes_ in enumerate(enum_strings):
-            bytes_ = bytes_[:MAX_ENUM_STRING_SIZE - 1]
-            self.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
-        self.no_str = len(enum_strings)
-
 
 class DBR_CTRL_CHAR(ControlTypeUnits):
     DBR_ID = ChannelType.CTRL_CHAR
