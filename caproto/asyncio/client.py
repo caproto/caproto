@@ -1304,16 +1304,17 @@ class VirtualCircuitManager:
         else:
             self.log.debug('Not attempting reconnection', extra=tags)
 
-        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks",
-                       extra=tags)
-        await self.user_callback_executor.shutdown()
-
     async def disconnect(self):
         await self._disconnected()
         if self.socket is None:
             return
 
         self.log.debug('Circuit manager disconnected by user')
+
+        tags = {'their_address': self.circuit.address}
+        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks",
+                       extra=tags)
+        await self.user_callback_executor.shutdown()
 
 
 def ensure_connected(func):
