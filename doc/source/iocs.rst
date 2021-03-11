@@ -121,6 +121,24 @@ an async library backend to use:
 
 The above would allow you to access ``prefix:my_pv`` over Channel Access.
 
+group_write
+-----------
+
+By default, if an explicit putter hook is not supplied for a given
+`.pvproperty`, an implicit one defined in the group will be used.
+
+.. python::
+
+    class MyGroup(PVGroup):
+        async def group_write(self, instance, value):
+            """Generic write called for channels without `put` defined."""
+            print(f"{instance.pvspec.attr} was written to with {value}.")
+
+
+This can be used to generically handle or modify the put handling of
+any pvproperty in the group.
+
+
 API
 ---
 
@@ -497,6 +515,10 @@ API
     :toctree: generated
 
     pvproperty
+
+
+General Tips
+============
 
 
 How do I...
