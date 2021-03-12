@@ -525,10 +525,22 @@ class PVSpec(namedtuple('PVSpec',
             name = self.name
         return self._replace(attr=attr, name=name)
 
-    def determine_data_class(self, type_map=None, type_map_read_only=None):
-        """Return the data class for a given PVSpec in a group."""
-        type_map = type_map or pvspec_type_map
-        type_map_read_only = type_map_read_only or pvspec_type_map
+    def get_data_class(self, group=None):
+        """
+        Return the data class for a given PVSpec in a group.
+
+        Parameters
+        ----------
+        group : PVGroup, optional
+            If unspecified, module-global type maps will be used.
+        """
+        if group is None:
+            type_map = pvspec_type_map
+            type_map_read_only = pvspec_type_map
+        else:
+            type_map = group.type_map
+            type_map_read_only = group.type_map_read_only
+
         dtype = self.dtype
 
         # A special case for integer enums:
@@ -541,28 +553,45 @@ class PVSpec(namedtuple('PVSpec',
         return type_map[dtype]
 
     def get_instantiation_info(self, group=None):
-        """Get class and instantiation arguments, given a parent group."""
+        """
+        Get class and instantiation arguments, given a parent group.
+
+        Parameters
+        ----------
+        group : PVGroup, optional
+            The parent group.
+
+        Returns
+        -------
+        cls : Type[ChannelData]
+            The class to instantiate.
+
+        kwargs : dict
+            Instantiation keyword arguments.
+        """
         if group is None:
             full_pvname = self.name
-
             value = self.value
             if value is None:
+                # No defaults without a group.
                 raise ValueError(f"Value required for {full_pvname!r}")
 
             # Without a group, you'll need to specify the alarm instance:
             alarm = self.alarm_group
-            if alarm and not isinstance(alarm, ChannelAlarm):
-                raise ValueError(f"Alarm instance required for {full_pvname!r}")
-            cls = self.determine_data_class()
         else:
             alarm = group.alarms[self.alarm_group]
             full_pvname = group.prefix + expand_macros(self.name, group.macros)
-            value = (
-                self.value
-                if self.value is not None
-                else group.default_values[self.dtype]
-            )
-            cls = self.determine_data_class(group.type_map, group.type_map_read_only)
+
+        cls = self.get_data_class(group)
+
+        if alarm and not isinstance(alarm, ChannelAlarm):
+            raise ValueError(f"Alarm instance required for {full_pvname!r}")
+
+        value = (
+            self.value
+            if self.value is not None
+            else group.default_values[self.dtype]
+        )
 
         return cls, dict(
             group=group,
