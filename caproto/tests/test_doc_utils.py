@@ -4,7 +4,6 @@ import caproto.docs.utils
 import caproto.ioc_examples.chirp
 import caproto.ioc_examples.custom_write
 import caproto.ioc_examples.decay
-import caproto.ioc_examples.io_interrupt
 import caproto.ioc_examples.macros
 import caproto.ioc_examples.mini_beamline
 import caproto.ioc_examples.pathological.reading_counter
@@ -32,7 +31,6 @@ from . import ioc_all_in_one, ioc_inline_style
         caproto.ioc_examples.thermo_sim.Thermo,
         caproto.ioc_examples.custom_write.CustomWrite,
         ioc_inline_style.InlineStyleIOC,
-        caproto.ioc_examples.io_interrupt.IOInterruptIOC,
         caproto.ioc_examples.macros.MacroifiedNames,
         caproto.ioc_examples.mini_beamline.MiniBeamline,
         caproto.ioc_examples.random_walk.RandomWalkIOC,
