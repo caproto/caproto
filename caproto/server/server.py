@@ -284,34 +284,36 @@ class PvpropertyData:
 
 
 class PvpropertyChar(PvpropertyData, ChannelChar):
-    ...
+    """Read-write 8-bit CHAR data for pvproperty with string encoding."""
 
 
 class PvpropertyByte(PvpropertyData, ChannelByte):
-    ...
+    """Read-write 8-bit CHAR data for pvproperty for bytes."""
 
 
 class PvpropertyShort(PvpropertyData, ChannelShort):
-    ...
+    """Read-write SHORT/INT data for pvproperty (16 bits)."""
 
 
 class PvpropertyInteger(PvpropertyData, ChannelInteger):
-    ...
+    """Read-write LONG data for pvproperty (32 bits)."""
 
 
 class PvpropertyFloat(PvpropertyData, ChannelFloat):
-    ...
+    """Read-write FLOAT data for pvproperty (32 bits)."""
 
 
 class PvpropertyDouble(PvpropertyData, ChannelDouble):
-    ...
+    """Read-write DOUBLE data for pvproperty (64 bits)."""
 
 
 class PvpropertyString(PvpropertyData, ChannelString):
-    ...
+    """Read-write STRING data for pvproperty (up to 40 chars)."""
 
 
 class PvpropertyEnum(PvpropertyData, ChannelEnum):
+    """Read-write ENUM data for pvproperty."""
+
     def __init__(self, *, enum_strings=None, value=None, **kwargs):
         if isinstance(value, enum.IntEnum):
             if enum_strings is not None:
@@ -326,6 +328,8 @@ class PvpropertyEnum(PvpropertyData, ChannelEnum):
 
 
 class PvpropertyBoolEnum(PvpropertyData, ChannelEnum):
+    """Read-write ENUM data for pvproperty, with Off/On as default strings."""
+
     def __init__(self, *, enum_strings=None, **kwargs):
         if enum_strings is None:
             enum_strings = ['Off', 'On']
@@ -333,43 +337,43 @@ class PvpropertyBoolEnum(PvpropertyData, ChannelEnum):
 
 
 class PvpropertyReadOnlyData(PvpropertyData):
-    """
-    A mixin class which marks this data as read-only from channel access.
-    """
+    """A mixin class which marks this data as read-only from channel access."""
 
     def check_access(self, host, user):
         return AccessRights.READ
 
 
 class PvpropertyCharRO(PvpropertyReadOnlyData, ChannelChar):
-    ...
+    """Read-only 8-bit CHAR data for pvproperty with string encoding."""
 
 
 class PvpropertyByteRO(PvpropertyReadOnlyData, ChannelByte):
-    ...
+    """Read-only 8-bit CHAR data for pvproperty for bytes."""
 
 
 class PvpropertyShortRO(PvpropertyReadOnlyData, ChannelShort):
-    ...
+    """Read-only SHORT/INT data for pvproperty (16 bits)."""
 
 
 class PvpropertyIntegerRO(PvpropertyReadOnlyData, ChannelInteger):
-    ...
-
-
-class PvpropertyDoubleRO(PvpropertyReadOnlyData, ChannelDouble):
-    ...
+    """Read-only LONG data for pvproperty (32 bits)."""
 
 
 class PvpropertyFloatRO(PvpropertyReadOnlyData, ChannelFloat):
-    ...
+    """Read-only FLOAT data for pvproperty (32 bits)."""
+
+
+class PvpropertyDoubleRO(PvpropertyReadOnlyData, ChannelDouble):
+    """Read-only DOUBLE data for pvproperty (64 bits)."""
 
 
 class PvpropertyStringRO(PvpropertyReadOnlyData, ChannelString):
-    ...
+    """Read-only STRING data for pvproperty (up to 40 chars)."""
 
 
 class PvpropertyEnumRO(PvpropertyReadOnlyData, ChannelEnum):
+    """Read-only ENUM data for pvproperty."""
+
     def __init__(self, *, enum_strings=None, value=None, **kwargs):
         if isinstance(value, enum.IntEnum):
             if enum_strings is not None:
@@ -384,6 +388,8 @@ class PvpropertyEnumRO(PvpropertyReadOnlyData, ChannelEnum):
 
 
 class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
+    """Read-only ENUM data for pvproperty, with Off/On as default strings."""
+
     def __init__(self, *, enum_strings=None, **kwargs):
         if enum_strings is None:
             enum_strings = ['Off', 'On']
