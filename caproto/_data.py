@@ -67,9 +67,8 @@ def dbr_metadata_to_dict(dbr_metadata, string_encoding):
 def _read_only_property(key, doc=None):
     '''Create property that gives read-only access to instance._data[key]'''
     if doc is None:
-        doc = 'data from key {!r}'.format(key)
-    return property(lambda self: self._data[key],
-                    doc=doc)
+        doc = f"Read-only access to {key} data"
+    return property(lambda self: self._data[key], doc=doc)
 
 
 class ChannelAlarm:
