@@ -1555,32 +1555,7 @@ class PVGroupMeta(type):
                 for subattr, subgroup in subgroup_cls._subgroups_.items():
                     subgroups['.'.join((attr, subattr))] = subgroup
 
-        for attr, prop in metacls.find_pvproperties(dct):
-            pvspec = prop.pvspec
-            module_logger.debug('class %s pvproperty attr %s: %r', name, attr,
-                                pvspec)
-            pvs[attr] = prop
-
-            if pvspec.cls_kwargs:
-                # Ensure all passed class kwargs are valid for the specific
-                # class, so it doesn't bite us on instantiation
-
-                prop_cls = data_class_from_pvspec(group=cls, pvspec=pvspec)
-                if not hasattr(prop_cls, '_valid_init_kw'):
-                    # TODO this should be generated elsewhere
-                    prop_cls._valid_init_kw = {
-                        key
-                        for cls in inspect.getmro(prop_cls)
-                        for key in inspect.signature(cls).parameters.keys()
-                    }
-
-                bad_kw = set(pvspec.cls_kwargs) - prop_cls._valid_init_kw
-                if bad_kw:
-                    raise CaprotoValueError(
-                        f'{cls.__name__}.{attr}: Bad kw for class {prop_cls}: '
-                        f'{bad_kw}'
-                    )
-
+        pvs.update(metacls.find_pvproperties(dct))
         return cls
 
 
