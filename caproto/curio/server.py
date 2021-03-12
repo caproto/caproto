@@ -6,6 +6,7 @@ from curio import socket
 
 import caproto as ca
 
+from .._utils import safe_getsockname
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
@@ -130,13 +131,15 @@ class Context(_Context):
     async def broadcaster_udp_server_loop(self):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
-            self.broadcaster.server_addresses.append(udp_sock.getsockname())
             try:
                 udp_sock.bind((interface, self.ca_server_port))
             except Exception:
                 self.log.exception('UDP bind failure on interface %r:%d',
                                    interface, self.ca_server_port)
                 raise
+            self.broadcaster.server_addresses.append(
+                safe_getsockname(udp_sock)
+            )
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
             self.udp_socks[interface] = udp_sock
