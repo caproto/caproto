@@ -1538,15 +1538,16 @@ class VirtualCircuitManager:
         else:
             self.log.debug('Not attempting reconnection', extra=tags)
 
-        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks", extra=tags)
-        self.user_callback_executor.shutdown()
-
     def disconnect(self):
         self._disconnected()
         if self.socket is None:
             return
 
         self.log.debug('Circuit manager disconnected by user')
+        tags = {'their_address': self.circuit.address}
+        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks",
+                       extra=tags)
+        self.user_callback_executor.shutdown()
 
     def __del__(self):
         try:
