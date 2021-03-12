@@ -142,6 +142,36 @@ By default, if an explicit putter hook is not supplied for a given
 This can be used to generically handle or modify the put handling of
 any pvproperty in the group.
 
+Alarms
+------
+
+PVGroup by default has an ``alarms`` attribute which is defined as follows:
+
+.. code:: python
+
+    alarms = collections.defaultdict(ChannelAlarm)
+
+Individual ``pvproperty`` instances specify their alarm instance as keys of
+this dictionary.  That is,
+
+.. code:: python
+
+    my_property = pvproperty(value=0, alarm_group="primary")
+
+means that ``my_property`` will join the "primary" alarm group, or the
+instance from
+
+.. code:: python
+
+    pvgroup_instance.alarms["primary"]
+
+While this is not required to be a string, it is recommended to do so by
+convention.
+
+Note that when ``alarm_group`` is unspecified, pvproperties in a given PVGroup
+instance share the same alarm instance - as their key to the above dictionary
+is left at the default value. This is usually a reasonable guess for small
+groups of PVs.
 
 API
 ---
@@ -608,6 +638,15 @@ As an convention, consider naming your method ``__ainit__``.
 
 See the full IOC example in ``startup_and_shutdown_hooks``.
 
+... stop every PV in my group from sharing the same alarm?
+----------------------------------------------------------
+
+By default, pvproperties in a given PVGroup instance share the same alarm
+instance. This is usually a reasonable guess for small groups of PVs.  For
+finer-grained customization, the easiest way to change this functionality is to
+specify a per-pvproperty alarm group using the ``alarm_group`` keyword
+argument.  It expects a string identifier, which should be reused on all other
+pvproperties that are expected to use the same alarm instance.
 
 ... make a string PV? All I see is an array of numbers!
 -------------------------------------------------------

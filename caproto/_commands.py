@@ -238,7 +238,7 @@ def data_payload(data, metadata, data_type, data_count):
         the input is big-endian. (We have no means of checking.) If the input
         is ``numpy.ndarray`` or any other iterable, we ensure big-endianness.
     metadata : a DBR struct, any iterable, or bytes
-    data_type : integer
+    data_type : ChannelType or integer
     data_count : integer
 
     Returns
@@ -246,6 +246,7 @@ def data_payload(data, metadata, data_type, data_count):
     size, md_payload, data_payload[, pad_payload]
         pad_payload will only be returned if needed
     """
+    data_type = ChannelType(data_type)
 
     # Make the data payload.
     if isinstance(data, bytes):
@@ -265,8 +266,7 @@ def data_payload(data, metadata, data_type, data_count):
     size, pad_payload = pad_buffers(md_payload, data_payload)
     if pad_payload:
         return size, md_payload, data_payload, pad_payload
-    else:
-        return size, md_payload, data_payload
+    return size, md_payload, data_payload
 
 
 def extract_data(buffer, data_type, data_count):
@@ -929,8 +929,9 @@ class EventAddRequest(Message):
 
     def __init__(self, data_type, data_count, sid, subscriptionid, low,
                  high, to, mask):
-        header = EventAddRequestHeader(data_type, data_count, sid,
-                                       subscriptionid)
+        header = EventAddRequestHeader(
+            ChannelType(data_type), data_count, sid, subscriptionid
+        )
         payload = EventAddRequestPayload(low=low, high=high, to=to, mask=mask)
         super().__init__(header, payload)
 
@@ -993,7 +994,9 @@ class EventAddResponse(Message):
 
     def __init__(self, data, data_type, data_count,
                  status, subscriptionid, *, metadata=None):
-        size, *buffers = data_payload(data, metadata, data_type, data_count)
+        size, *buffers = data_payload(
+            data, metadata, ChannelType(data_type), data_count
+        )
         status = ensure_eca_value(status)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status, subscriptionid)
@@ -1055,7 +1058,9 @@ class EventCancelRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, sid, subscriptionid):
-        header = EventCancelRequestHeader(data_type, 0, sid, subscriptionid)
+        header = EventCancelRequestHeader(
+            ChannelType(data_type), 0, sid, subscriptionid
+        )
         super().__init__(header)
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
@@ -1087,8 +1092,9 @@ class EventCancelResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, sid, subscriptionid, data_count):
-        header = EventCancelResponseHeader(data_type, data_count, sid,
-                                           subscriptionid)
+        header = EventCancelResponseHeader(
+            ChannelType(data_type), data_count, sid, subscriptionid
+        )
         super().__init__(header)
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
@@ -1116,7 +1122,7 @@ class ReadRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, data_count, sid, ioid):
-        header = ReadRequestHeader(data_type, data_count, sid, ioid)
+        header = ReadRequestHeader(ChannelType(data_type), data_count, sid, ioid)
         super().__init__(header, validate=False)
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
@@ -1365,7 +1371,9 @@ class ReadNotifyRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, data_count, sid, ioid):
-        header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
+        header = ReadNotifyRequestHeader(
+            ChannelType(data_type), data_count, sid, ioid
+        )
         super().__init__(header)
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
@@ -1515,7 +1523,9 @@ class CreateChanResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, data_count, cid, sid):
-        header = CreateChanResponseHeader(data_type, data_count, cid, sid)
+        header = CreateChanResponseHeader(
+            ChannelType(data_type), data_count, cid, sid
+        )
         super().__init__(header)
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
@@ -1614,7 +1624,9 @@ class WriteNotifyResponse(Message):
 
     def __init__(self, data_type, data_count, status, ioid):
         status = ensure_eca_value(status)
-        header = WriteNotifyResponseHeader(data_type, data_count, status, ioid)
+        header = WriteNotifyResponseHeader(
+            ChannelType(data_type), data_count, status, ioid
+        )
         super().__init__(header)
 
     data_type = property(lambda self: ChannelType(self.header.data_type))

@@ -67,15 +67,34 @@ def dbr_metadata_to_dict(dbr_metadata, string_encoding):
 def _read_only_property(key, doc=None):
     '''Create property that gives read-only access to instance._data[key]'''
     if doc is None:
-        doc = 'data from key {!r}'.format(key)
-    return property(lambda self: self._data[key],
-                    doc=doc)
+        doc = f"Read-only access to {key} data"
+    return property(lambda self: self._data[key], doc=doc)
 
 
 class ChannelAlarm:
     def __init__(self, *, status=0, severity=0,
                  must_acknowledge_transient=True, severity_to_acknowledge=0,
                  alarm_string='', string_encoding='latin-1'):
+        """
+        Alarm metadata that can be used by one or more ChannelData instances.
+
+        Parameters
+        ----------
+        status : int or AlarmStatus, optional
+            Status information.
+        severity : int or AlarmSeverity, optional
+            Severity information.
+        must_acknowledge_transient : int, optional
+            Whether or not transient alarms must be acknowledged.
+        severity_to_acknowledge : int, optional
+            The highest alarm severity to acknowledge. If the current alarm
+            severity is less then or equal to this value the alarm is
+            acknowledged.
+        alarm_string : str, optional
+            Alarm information.
+        string_encoding : str, optional
+            String encoding of the alarm string.
+        """
         self._channels = weakref.WeakSet()
         self.string_encoding = string_encoding
         self._data = dict(
@@ -114,12 +133,15 @@ class ChannelAlarm:
         return f'<ChannelAlarm(status={self.status}, severity={self.severity})>'
 
     def connect(self, channel_data):
+        """Add a ChannelData instance to the channel set using this alarm."""
         self._channels.add(channel_data)
 
     def disconnect(self, channel_data):
+        """Remove ChannelData instance from channel set using this alarm."""
         self._channels.remove(channel_data)
 
     async def read(self, dbr=None):
+        """Read alarm information into a DBR_STSACK_STRING instance."""
         if dbr is None:
             dbr = DBR_STSACK_STRING()
         dbr.status = self.status
@@ -132,8 +154,29 @@ class ChannelAlarm:
     async def write(self, *, status=None, severity=None,
                     must_acknowledge_transient=None,
                     severity_to_acknowledge=None,
-                    alarm_string=None, caller=None,
-                    flags=0, publish=True):
+                    alarm_string=None, flags=0, publish=True):
+        """
+        Write data to the alarm and optionally publish it to clients.
+
+        Parameters
+        ----------
+        status : int or AlarmStatus, optional
+            Status information.
+        severity : int or AlarmSeverity, optional
+            Severity information.
+        must_acknowledge_transient : int, optional
+            Whether or not transient alarms must be acknowledged.
+        severity_to_acknowledge : int, optional
+            The highest alarm severity to acknowledge. If the current alarm
+            severity is less then or equal to this value the alarm is
+            acknowledged.
+        alarm_string : str, optional
+            Alarm information.
+        flags : SubscriptionType or int, optional
+            Subscription flags.
+        publish : bool, optional
+            Optionally publish the alarm status after the write.
+        """
         data = self._data
 
         if status is not None:
@@ -172,39 +215,49 @@ class ChannelAlarm:
         if publish:
             await self.publish(flags)
 
-    async def publish(self, flags, *, except_for=()):
+    async def publish(self, flags, *, except_for=None):
+        """
+        Publish alarm information to all listening channels.
 
+        Parameters
+        ----------
+        flags : SubscriptionType
+            The subscription type to publish.
+        except_for : sequence of ChannelData, optional
+            Skip publishing to these channels, mainly to avoid recursion.
+        """
+        except_for = except_for or ()
         for channel in self._channels:
             if channel not in except_for:
                 await channel.publish(flags)
 
 
 class ChannelData:
+    """
+    Base class holding data and metadata which can be sent across a Channel.
+
+    Parameters
+    ----------
+    value :
+        Data which has to match with this class's ``data_type``.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual
+        record or be set to something arbitrary.  Defaults to 'caproto'.
+    """
     data_type = ChannelType.LONG
     _compatible_array_types = {}
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
                  max_length=None, string_encoding='latin-1',
                  reported_record_type='caproto'):
-        '''Metadata and Data for a single caproto Channel
-
-        Parameters
-        ----------
-        value :
-            Data which has to match with this class's data_type
-        timestamp : float, optional
-            Posix timestamp associated with the value
-            Defaults to `time.time()`
-        max_length : int, optional
-            Maximum array length of the data
-        string_encoding : str, optional
-            Encoding to use for strings, used both in and out
-        reported_record_type : str, optional
-            Though this is not a record, the channel access protocol supports
-            querying the record type.  This can be set to mimic an actual
-            record or be set to something arbitrary.
-            Defaults to 'caproto'
-        '''
         if timestamp is None:
             timestamp = time.time()
         if alarm is None:
@@ -367,6 +420,18 @@ class ChannelData:
             alarm.connect(self)
 
     async def subscribe(self, queue, sub_spec, sub):
+        """
+        Subscribe a queue for the given subscription specification.
+
+        Parameters
+        ----------
+        queue : asyncio.Queue or compatible
+            The queue to send data to.
+        sub_spec : SubscriptionSpec
+            The matching subscription specification.
+        sub : Subscription
+            The subscription instance.
+        """
         by_sync = self._queues[queue][sub_spec.channel_filter.sync]
         by_sync[sub_spec.data_type_name].add(sub_spec)
 
@@ -382,6 +447,16 @@ class ChannelData:
         await queue.put(SubscriptionUpdate((sub_spec,), metadata, values, 0, sub))
 
     async def unsubscribe(self, queue, sub_spec):
+        """
+        Unsubscribe a queue for the given subscription specification.
+
+        Parameters
+        ----------
+        queue : asyncio.Queue or compatible
+            The queue to send data to.
+        sub_spec : SubscriptionSpec
+            The subscription specification.
+        """
         by_sync = self._queues[queue][sub_spec.channel_filter.sync]
         by_sync[sub_spec.data_type_name].discard(sub_spec)
 
@@ -395,11 +470,27 @@ class ChannelData:
         return (await self.read(data_type))
 
     async def read(self, data_type):
+        """
+        Read out the ChannelData as ``data_type``.
+
+        Parameters
+        ----------
+        data_type : ChannelType
+            The data type to read out.
+        """
         # Subclass might trigger a write here to update self._data before
         # reading it out.
         return (await self._read(data_type))
 
     async def _read(self, data_type):
+        """
+        Inner method to read out the ChannelData as ``data_type``.
+
+        Parameters
+        ----------
+        data_type : ChannelType
+            The data type to read out.
+        """
         # special cases for alarm strings and class name
         if data_type == ChannelType.STSACK_STRING:
             ret = await self.alarm.read()
@@ -442,6 +533,34 @@ class ChannelData:
 
     async def auth_write(self, hostname, username, data, data_type, metadata,
                          *, flags=0, user_address=None):
+        """
+        Data write hook for clients.
+
+        First verifies that the specified client may write to the instance
+        prior to proceeding.
+
+        Parameters
+        ----------
+        hostname : str
+            The hostname of the client.
+        username : str
+            The username of the client.
+        data :
+            The data to write.
+        data_type : ChannelType
+            The data type associated with the written data.
+        metadata :
+            Metadata instance.
+        flags : int, optional
+            Flags for publishing.
+        user_address : tuple, optional
+            (host, port) tuple of the user.
+
+        Raises
+        ------
+        Forbidden:
+            If client is not allowed to write to this instance.
+        """
         access = self.check_access(hostname, username)
         if AccessRights.WRITE not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "
@@ -450,15 +569,36 @@ class ChannelData:
                                           flags=flags))
 
     async def verify_value(self, data):
-        '''Verify a value prior to it being written by CA or Python
+        """
+        Verify a value prior to it being written by CA or Python
 
         To reject a value, raise an exception. Otherwise, return the
         original value or a modified version of it.
-        '''
+        """
         return data
 
     async def write_from_dbr(self, data, data_type, metadata, *, flags=0):
-        '''Set data from DBR metadata/values'''
+        """
+        Write data from a provided DBR data type.
+
+        Does not verify the client has authorization to write.
+
+        Parameters
+        ----------
+        data :
+            The data to write.
+        data_type : ChannelType
+            The data type associated with the written data.
+        metadata :
+            Metadata instance.
+        flags : int, optional
+            Flags for publishing.
+
+        Raises
+        ------
+        CaprotoValueError:
+            If the request is not valid.
+        """
         if data_type == ChannelType.PUT_ACKS:
             await self.alarm.write(severity_to_acknowledge=metadata.value)
             return
@@ -495,7 +635,27 @@ class ChannelData:
 
     async def write(self, value, *, flags=0, verify_value=True,
                     update_fields=True, **metadata):
-        '''Set data from native Python types'''
+        """
+        Write data from native Python types.
+
+        Parameters
+        ----------
+        value :
+            The native Python data.
+        flags : SubscriptionType or int, optional
+            The flags for subscribers.
+        verify_value : bool, optional
+            Run the ``verify_value`` hook prior to updating internal state.
+        update_fields : bool, optional
+            Run the ``update_fields`` hook prior to updating internal state.
+
+        Raises
+        ------
+        Exception:
+            Any exception raised in the handlers (except SkipWrite) will be
+            propagated to the caller.
+        """
+
         try:
             value = self.preprocess_value(value)
             if verify_value:
@@ -556,10 +716,18 @@ class ChannelData:
         """This is a hook for subclasses to update field instance data."""
 
     async def publish(self, flags):
-        # Each SubscriptionSpec specifies a certain data type it is interested
-        # in and a mask. Send one update per queue per data_type if and only if
-        # any subscriptions specs on a queue have a compatible mask.
+        """
+        Publish data to appropriate queues matching the SubscriptionSpec.
 
+        Each SubscriptionSpec specifies a certain data type it is interested in
+        and a mask. Send one update per queue per data_type if and only if any
+        subscriptions specs on a queue have a compatible mask.
+
+        Parameters
+        ----------
+        flags : SubscriptionSpec
+            The subscription specification to match.
+        """
         # Copying the data into structs with various data types is expensive,
         # so we only want to do it if it's going to be used, and we only want
         # to do each conversion once. Clear the cache to start. This cache is
@@ -602,7 +770,7 @@ class ChannelData:
                     await queue.put(SubscriptionUpdate(eligible, metadata, values, flags, None))
 
     def _read_metadata(self, dbr_metadata):
-        'Set all metadata fields of a given DBR type instance'
+        """Fill the provided metadata instance with current metadata."""
         to_type = ChannelType(dbr_metadata.DBR_ID)
         data = self._data
 
@@ -650,7 +818,40 @@ class ChannelData:
                              lower_warning_limit=None, lower_alarm_limit=None,
                              upper_ctrl_limit=None, lower_ctrl_limit=None,
                              status=None, severity=None):
-        '''Write metadata, optionally publishing information to clients'''
+        """
+        Write metadata, optionally publishing information to clients.
+
+        Parameters
+        ----------
+        publish : bool, optional
+            Publish the metadata update to clients.
+        units : str, optional
+            Updated units.
+        precision : int, optional
+            Updated precision value.
+        timestamp : float, optional
+            Updated timestamp.
+        upper_disp_limit : int or float, optional
+            Updated upper display limit.
+        lower_disp_limit : int or float, optional
+            Updated lower display limit.
+        upper_alarm_limit : int or float, optional
+            Updated upper alarm limit.
+        upper_warning_limit : int or float, optional
+            Updated upper warning limit.
+        lower_warning_limit : int or float, optional
+            Updated lower warning limit.
+        lower_alarm_limit : int or float, optional
+            Updated lower alarm limit.
+        upper_ctrl_limit : int or float, optional
+            Updated upper control limit.
+        lower_ctrl_limit : int or float, optional
+            Updated lower control limit.
+        status : AlarmStatus, optional
+            Updated alarm status.
+        severity : AlarmSeverity, optional
+            Updated alarm severity.
+        """
         data = self._data
         for kw in ('units', 'precision', 'timestamp', 'upper_disp_limit',
                    'lower_disp_limit', 'upper_alarm_limit',
@@ -777,6 +978,26 @@ class ChannelData:
 
 
 class ChannelEnum(ChannelData):
+    """
+    ENUM data which can be sent over a channel.
+
+    Arrays of ENUM data are not supported.
+
+    Parameters
+    ----------
+    value : int or str
+        The string value in the enum, or an integer index of that list.
+    enum_strings : list, tuple, optional
+        Enum strings to be used for the data.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    """
+
     data_type = ChannelType.ENUM
 
     @staticmethod
@@ -849,6 +1070,51 @@ class ChannelEnum(ChannelData):
 
 
 class ChannelNumeric(ChannelData):
+    """
+    Base class for numeric data types with limits.
+
+    May be a single value or an array of values.
+
+    Parameters
+    ----------
+    value :
+        Data which has to match with this class's ``data_type``.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual
+        record or be set to something arbitrary.  Defaults to 'caproto'.
+    units : str, optional
+        Engineering units indicator, which can be retrieved over channel
+        access.
+    upper_disp_limit : numeric, optional
+        Upper display limit.
+    lower_disp_limit : numeric, optional
+        Lower display limit.
+    upper_alarm_limit : numeric, optional
+        Upper alarm limit.
+    upper_warning_limit : numeric, optional
+        Upper warning limit.
+    lower_warning_limit : numeric, optional
+        Lower warning limit.
+    lower_alarm_limit : numeric, optional
+        Lower alarm limit.
+    upper_ctrl_limit : numeric, optional
+        Upper control limit.
+    lower_ctrl_limit : numeric, optional
+        Lower control limit.
+    value_atol : numeric, optional
+        Archive tolerance value.
+    log_atol : numeric, optional
+        Log tolerance value.
+    """
+
     def __init__(self, *, value, units='',
                  upper_disp_limit=0, lower_disp_limit=0,
                  upper_alarm_limit=0, upper_warning_limit=0,
@@ -856,7 +1122,6 @@ class ChannelNumeric(ChannelData):
                  upper_ctrl_limit=0, lower_ctrl_limit=0,
                  value_atol=0.0, log_atol=0.0,
                  **kwargs):
-
         super().__init__(value=value, **kwargs)
         self._data['units'] = units
         self._data['upper_disp_limit'] = upper_disp_limit
@@ -980,14 +1245,147 @@ class ChannelNumeric(ChannelData):
 
 
 class ChannelShort(ChannelNumeric):
+    """
+    16-bit short integer data and metadata which can be sent over a channel.
+
+    May be a single value or an array of values.
+
+    Parameters
+    ----------
+    value : int or list of int
+        Default starting value.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual
+        record or be set to something arbitrary.  Defaults to 'caproto'.
+    units : str, optional
+        Engineering units indicator, which can be retrieved over channel
+        access.
+    upper_disp_limit : int, optional
+        Upper display limit.
+    lower_disp_limit : int, optional
+        Lower display limit.
+    upper_alarm_limit : int, optional
+        Upper alarm limit.
+    upper_warning_limit : int, optional
+        Upper warning limit.
+    lower_warning_limit : int, optional
+        Lower warning limit.
+    lower_alarm_limit : int, optional
+        Lower alarm limit.
+    upper_ctrl_limit : int, optional
+        Upper control limit.
+    lower_ctrl_limit : int, optional
+        Lower control limit.
+    value_atol : int, optional
+        Archive tolerance value.
+    log_atol : int, optional
+        Log tolerance value.
+    """
     data_type = ChannelType.INT
 
 
 class ChannelInteger(ChannelNumeric):
+    """
+    32-bit short integer data and metadata which can be sent over a channel.
+
+    May be a single value or an array of values.
+
+    Parameters
+    ----------
+    value : int or list of int
+        Default starting value.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual
+        record or be set to something arbitrary.  Defaults to 'caproto'.
+    units : str, optional
+        Engineering units indicator, which can be retrieved over channel
+        access.
+    upper_disp_limit : int, optional
+        Upper display limit.
+    lower_disp_limit : int, optional
+        Lower display limit.
+    upper_alarm_limit : int, optional
+        Upper alarm limit.
+    upper_warning_limit : int, optional
+        Upper warning limit.
+    lower_warning_limit : int, optional
+        Lower warning limit.
+    lower_alarm_limit : int, optional
+        Lower alarm limit.
+    upper_ctrl_limit : int, optional
+        Upper control limit.
+    lower_ctrl_limit : int, optional
+        Lower control limit.
+    value_atol : int, optional
+        Archive tolerance value.
+    log_atol : int, optional
+        Log tolerance value.
+    """
     data_type = ChannelType.LONG
 
 
 class ChannelFloat(ChannelNumeric):
+    """
+    32-bit floating point data and metadata which can be sent over a channel.
+
+    May be a single value or an array of values.
+
+    Parameters
+    ----------
+    value : float or list of float
+        Initial value for the data.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual record or
+        be set to something arbitrary.  Defaults to 'caproto'.
+    units : str, optional
+        Engineering units indicator, which can be retrieved over channel
+        access.
+    upper_disp_limit : float, optional
+        Upper display limit.
+    lower_disp_limit : float, optional
+        Lower display limit.
+    upper_alarm_limit : float, optional
+        Upper alarm limit.
+    upper_warning_limit : float, optional
+        Upper warning limit.
+    lower_warning_limit : float, optional
+        Lower warning limit.
+    lower_alarm_limit : float, optional
+        Lower alarm limit.
+    upper_ctrl_limit : float, optional
+        Upper control limit.
+    lower_ctrl_limit : float, optional
+        Lower control limit.
+    value_atol : float, optional
+        Archive tolerance value.
+    log_atol : float, optional
+        Log tolerance value.
+    """
+
     data_type = ChannelType.FLOAT
 
     def __init__(self, *, precision=0, **kwargs):
@@ -1003,6 +1401,50 @@ class ChannelFloat(ChannelNumeric):
 
 
 class ChannelDouble(ChannelNumeric):
+    """
+    64-bit floating point data and metadata which can be sent over a channel.
+
+    May be a single value or an array of values.
+
+    Parameters
+    ----------
+    value : float or list of float
+        Initial value for the data.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual
+        record or be set to something arbitrary.  Defaults to 'caproto'.
+    units : str, optional
+        Engineering units indicator, which can be retrieved over channel
+        access.
+    upper_disp_limit : float, optional
+        Upper display limit.
+    lower_disp_limit : float, optional
+        Lower display limit.
+    upper_alarm_limit : float, optional
+        Upper alarm limit.
+    upper_warning_limit : float, optional
+        Upper warning limit.
+    lower_warning_limit : float, optional
+        Lower warning limit.
+    lower_alarm_limit : float, optional
+        Lower alarm limit.
+    upper_ctrl_limit : float, optional
+        Upper control limit.
+    lower_ctrl_limit : float, optional
+        Lower control limit.
+    value_atol : float, optional
+        Archive tolerance value.
+    log_atol : float, optional
+        Log tolerance value.
+    """
     data_type = ChannelType.DOUBLE
 
     def __init__(self, *, precision=0, **kwargs):
@@ -1019,7 +1461,51 @@ class ChannelDouble(ChannelNumeric):
 
 
 class ChannelByte(ChannelNumeric):
-    'CHAR data which has no encoding'
+    """
+    8-bit unencoded CHAR data plus metadata which can be sent over a channel.
+
+    May be a single CHAR or an array of CHAR.
+
+    Parameters
+    ----------
+    value : int or bytes
+        Initial starting data.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual
+        record or be set to something arbitrary.  Defaults to 'caproto'.
+    units : str, optional
+        Engineering units indicator, which can be retrieved over channel
+        access.
+    upper_disp_limit : int, optional
+        Upper display limit.
+    lower_disp_limit : int, optional
+        Lower display limit.
+    upper_alarm_limit : int, optional
+        Upper alarm limit.
+    upper_warning_limit : int, optional
+        Upper warning limit.
+    lower_warning_limit : int, optional
+        Lower warning limit.
+    lower_alarm_limit : int, optional
+        Lower alarm limit.
+    upper_ctrl_limit : int, optional
+        Upper control limit.
+    lower_ctrl_limit : int, optional
+        Lower control limit.
+    value_atol : int, optional
+        Archive tolerance value.
+    log_atol : int, optional
+        Log tolerance value.
+    """
+
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChannelType.CHAR
     _compatible_array_types = {'|u1', '|i1', '|b1'}
@@ -1069,7 +1555,33 @@ class ChannelByte(ChannelNumeric):
 
 
 class ChannelChar(ChannelData):
-    'CHAR data which masquerades as a string'
+    """
+    8-bit encoded CHAR data plus metadata which can be sent over a channel.
+
+    Allows for simple access over CA to the first 40 characters as a DBR_STRING
+    when ``report_as_string`` is set.
+
+    Parameters
+    ----------
+    value : str
+        Initial starting data.
+    string_encoding : str, optional
+        The string encoding to use, defaults to 'latin-1'.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual
+        record or be set to something arbitrary.  Defaults to 'caproto'.
+    units : str, optional
+        Engineering units indicator, which can be retrieved over channel
+        access.
+    """
     data_type = ChannelType.CHAR
     _compatible_array_types = {'|u1', '|i1', '|b1'}
 
@@ -1134,6 +1646,33 @@ class ChannelChar(ChannelData):
 
 
 class ChannelString(ChannelData):
+    """
+    8-bit encoded string data plus metadata which can be sent over a channel.
+
+    Allows for simple access over CA to the first 40 characters as a DBR_STRING
+    when ``report_as_string`` is set.
+
+    Parameters
+    ----------
+    value : str
+        Initial starting data.
+    string_encoding : str, optional
+        The string encoding to use, defaults to 'latin-1'.
+    long_string_max_length : str, optional
+        When requested as a long string (DBR_CHAR over Channel Access), this
+        is the reported maximum length.
+    timestamp : float, optional
+        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    max_length : int, optional
+        Maximum array length of the data.
+    string_encoding : str, optional
+        Encoding to use for strings, used when serializing and deserializing
+        data.
+    reported_record_type : str, optional
+        Though this is not a record, the channel access protocol supports
+        querying the record type.  This can be set to mimic an actual
+        record or be set to something arbitrary.  Defaults to 'caproto'.
+    """
     data_type = ChannelType.STRING
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
