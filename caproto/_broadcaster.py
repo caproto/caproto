@@ -116,6 +116,8 @@ class Broadcaster:
         """
         try:
             commands = read_datagram(byteslike, address, self.their_role)
+        except RemoteProtocolError:
+            raise
         except Exception as ex:
             raise RemoteProtocolError(f'Broadcaster malformed packet received:'
                                       f' {ex.__class__.__name__} {ex}') from ex

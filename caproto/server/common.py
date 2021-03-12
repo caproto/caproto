@@ -751,8 +751,8 @@ class Context:
     async def _broadcaster_recv_datagram(self, bytes_received, address):
         try:
             commands = self.broadcaster.recv(bytes_received, address)
-        except RemoteProtocolError:
-            self.log.exception('Broadcaster received bad packet')
+        except RemoteProtocolError as ex:
+            self.log.debug('_broadcaster_recv_datagram: %s', ex, exc_info=ex)
         else:
             await self.command_bundle_queue.put((address, commands))
 
