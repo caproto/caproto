@@ -57,7 +57,8 @@ from ._headers import (AccessRightsResponseHeader, BeaconHeader,
 from ._status import eca_value_to_status, ensure_eca_value
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoNotImplementedError, CaprotoTypeError,
-                     CaprotoValueError, ValidationError, ensure_bytes)
+                     CaprotoValueError, RemoteProtocolError, ValidationError,
+                     ensure_bytes)
 
 __all__ = ('AccessRightsResponse', 'ClearChannelRequest',
            'ClearChannelResponse', 'ClientNameRequest',
@@ -296,7 +297,13 @@ def read_datagram(data, address, role):
     while barray:
         header = MessageHeader.from_buffer(barray)
         barray = barray[_MessageHeaderSize:]
-        _class = Commands[role][header.command]
+        try:
+            _class = Commands[role][header.command]
+        except KeyError:
+            raise RemoteProtocolError(
+                f"Packet with bad command ID {hex(header.command)} was "
+                f"received. Header: {header}"
+            ) from None
         payload_size = header.payload_size
         if _class.HAS_PAYLOAD:
             payload_bytes = barray[:header.payload_size]
@@ -363,7 +370,17 @@ def read_from_bytestream(data, role):
     if num_bytes_needed > 0:
         return data, NEED_DATA, num_bytes_needed
 
-    _class = Commands[role][header.command]
+    try:
+        _class = Commands[role][header.command]
+    except KeyError:
+        raise RemoteProtocolError(
+            f"Packet with bad command ID {hex(header.command)} was received."
+            f"\nThis may be a non-Channel Access client such as a security "
+            f"scanner attempting to probe a server, a malfunctioning client, "
+            f"or an unsupported client. If the above does not apply, please "
+            f"open an issue: https://github.com/caproto/caproto/issues"
+            f"\nHeader details: {header}."
+        ) from None
 
     header_size = ctypes.sizeof(header)
     total_size = header_size + header.payload_size
