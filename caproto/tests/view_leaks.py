@@ -8,7 +8,9 @@ Usage:
 """
 
 import ast
+import os
 import sys
+import traceback
 import xml.etree.ElementTree as ET
 
 DEFAULT_KEYS = ['total_threads', 'dangling_threads', 'total_sockets',
@@ -60,7 +62,6 @@ def parse_properties(fn):
         try:
             name, properties = get_properties(test_case)
         except Exception:
-            print('Failed: {test_case}')
             continue
 
         all_properties[name] = properties
@@ -77,12 +78,18 @@ def parse_properties(fn):
 
 
 if __name__ == '__main__':
-    properties = parse_properties(sys.argv[1])
+    fn = sys.argv[1]
+    if not os.path.exists(fn):
+        print(f"ERROR: File does not exist: {fn}")
+        sys.exit(0)
 
     try:
+        properties = parse_properties(fn)
         import pandas as pd
-    except ImportError:
-        ...
-    else:
-        df = pd.DataFrame(properties).transpose()
-        print(df)
+    except Exception:
+        print("Error occurred while looking for leaks :(")
+        traceback.print_exc()
+        sys.exit(0)
+
+    df = pd.DataFrame(properties).transpose()
+    print(df)
