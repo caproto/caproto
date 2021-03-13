@@ -1300,7 +1300,7 @@ class VirtualCircuitManager:
             self.log.debug('Not attempting reconnection', extra=tags)
 
     async def disconnect(self):
-        await self._disconnected()
+        await self._disconnected(reconnect=False)
 
         self.log.debug("Shutting down ThreadPoolExecutor for user callbacks",
                        extra={'their_address': self.circuit.address})
