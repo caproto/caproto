@@ -1214,7 +1214,7 @@ class Context:
                 if circuit.connected:
                     self.log.debug('Disconnecting circuit %d/%d: %s',
                                    idx, total_circuits, circuit)
-                    circuit._disconnected(reconnect=False)
+                    circuit.disconnect()
                     disconnected = True
             if disconnected:
                 self.log.debug('All circuits disconnected')

@@ -603,7 +603,7 @@ class Context:
                 if circuit.connected:
                     self.log.debug('Disconnecting circuit %d/%d: %s',
                                    idx, total_circuits, circuit)
-                    await circuit._disconnected(reconnect=False)
+                    await circuit.disconnect()
                     disconnected = True
             if disconnected:
                 self.log.debug('All circuits disconnected')
