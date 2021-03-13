@@ -117,35 +117,27 @@ def test_specified_port(monkeypatch, context, ioc):
 @pytest.fixture(scope='function')
 def shared_broadcaster(request):
     sb = SharedBroadcaster()
-
-    def cleanup():
-        sb.disconnect()
-        assert not sb._command_thread.is_alive()
-        assert not sb.selector.thread.is_alive()
-        assert not sb._retry_unanswered_searches_thread.is_alive()
-
-    request.addfinalizer(cleanup)
-    return sb
+    yield sb
+    sb.disconnect()
+    assert not sb._command_thread.is_alive()
+    assert not sb.selector.thread.is_alive()
+    assert not sb._retry_unanswered_searches_thread.is_alive()
 
 
 @pytest.fixture(scope='function')
 def context(request, shared_broadcaster):
     context = Context(broadcaster=shared_broadcaster)
     sb = shared_broadcaster
-
-    def cleanup():
-        print('*** Cleaning up the context!')
-        context.disconnect()
-        assert not context._process_search_results_thread.is_alive()
-        assert not context._activate_subscriptions_thread.is_alive()
-        assert not context.selector.thread.is_alive()
-        sb.disconnect()
-        assert not sb._command_thread.is_alive()
-        assert not sb.selector.thread.is_alive()
-        assert not sb._retry_unanswered_searches_thread.is_alive()
-
-    request.addfinalizer(cleanup)
-    return context
+    yield context
+    print('*** Cleaning up the context!')
+    context.disconnect()
+    assert not context._process_search_results_thread.is_alive()
+    assert not context._activate_subscriptions_thread.is_alive()
+    assert not context.selector.thread.is_alive()
+    sb.disconnect()
+    assert not sb._command_thread.is_alive()
+    assert not sb.selector.thread.is_alive()
+    assert not sb._retry_unanswered_searches_thread.is_alive()
 
 
 def test_server_crash(context, ioc_factory):
@@ -574,6 +566,9 @@ def test_multithreaded_many_write(ioc, context, thread_count,
         return ret
 
     pv, = context.get_pvs(ioc.pvs['int'])
+    # Ensure we have a different value to start with
+    start_value = 1000 + thread_count
+    pv.write(start_value)
     values = []
 
     def callback(sub, command):
@@ -584,7 +579,8 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
 
     _multithreaded_exec(_test, thread_count)
-    assert set(values[1:]) == set(range(thread_count))
+    expected = set(range(thread_count)).union({start_value})
+    assert set(values) == expected
 
     sub.clear()
 
