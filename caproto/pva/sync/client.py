@@ -123,6 +123,19 @@ def search(pv, udp_sock, udp_port, timeout, max_retries=2):
         while True:
             try:
                 bytes_received, address = udp_sock.recvfrom(MAX_UDP_RECV)
+            except ConnectionResetError as ex:
+                # Win32: "On a UDP-datagram socket this error indicates a
+                # previous send operation resulted in an ICMP Port Unreachable
+                # message."
+                #
+                # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                #
+                # Despite the above, this does not *appear* to be fatal;
+                # sometimes the second try will work.
+                logger.debug('Connection reset, retrying: %s', ex)
+                check_timeout()
+                time.sleep(0.1)
+                continue
             except socket.timeout:
                 check_timeout()
                 continue
@@ -140,8 +153,12 @@ def search(pv, udp_sock, udp_port, timeout, max_retries=2):
                     continue
 
                 if command.found:
-                    host_port = (command.server_address,
-                                 command.server_port)
+                    if command.server_address == '0.0.0.0':
+                        host_port = (address[0],
+                                     command.server_port)
+                    else:
+                        host_port = (command.server_address,
+                                     command.server_port)
                     logger.debug('Found %r at %r.', response_pvs,
                                  host_port)
                     return host_port

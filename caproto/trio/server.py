@@ -184,14 +184,15 @@ class Context(_Context):
     async def broadcaster_udp_server_loop(self, task_status):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
-            self.broadcaster.server_addresses.append(
-                safe_getsockname(udp_sock))
             try:
                 await udp_sock.bind((interface, self.ca_server_port))
             except Exception:
                 self.log.exception('UDP bind failure on interface %r',
                                    interface)
                 raise
+            self.broadcaster.server_addresses.append(
+                safe_getsockname(udp_sock)
+            )
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
             self.udp_socks[interface] = udp_sock

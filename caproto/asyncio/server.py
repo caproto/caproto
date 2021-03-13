@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import sys
 
 import caproto as ca
 
@@ -161,19 +162,7 @@ class Context(_Context):
                                           wrapped_transport)
 
         for interface in self.interfaces:
-            sock = _create_udp_socket()
-            sock.bind((interface, self.ca_server_port))
-            transport, _ = await self.loop.create_datagram_endpoint(
-                functools.partial(_DatagramProtocol, parent=self,
-                                  identifier=interface,
-                                  queue=self.broadcaster_datagram_queue),
-                sock=sock,
-            )
-            self.udp_socks[interface] = _UdpTransportWrapper(
-                transport, loop=self.loop
-            )
-            self.log.debug('UDP socket bound on %s:%d', interface,
-                           self.ca_server_port)
+            await self._create_broadcaster_transport(interface)
 
         tasks.create(self.broadcaster_receive_loop())
         tasks.create(self.broadcaster_queue_loop())
@@ -221,14 +210,43 @@ class Context(_Context):
             for _, sock in self.beacon_socks.values():
                 sock.close()
 
+    async def _create_broadcaster_transport(self, interface):
+        """Create broadcaster transport on the given interface."""
+        old_transport = self.udp_socks.pop(interface, None)
+        if old_transport is not None:
+            try:
+                old_transport.close()
+            except OSError:
+                self.log.warning(
+                    "Failed to close old transport for interface %s", interface
+                )
+
+        sock = _create_udp_socket()
+        sock.bind((interface, self.ca_server_port))
+        transport, _ = await self.loop.create_datagram_endpoint(
+            functools.partial(_DatagramProtocol, parent=self,
+                              identifier=interface,
+                              queue=self.broadcaster_datagram_queue),
+            sock=sock,
+        )
+        self.udp_socks[interface] = _UdpTransportWrapper(
+            transport, loop=self.loop
+        )
+        self.log.debug('UDP socket bound on %s:%d', interface,
+                       self.ca_server_port)
+
     async def broadcaster_receive_loop(self):
         # UdpTransport -> broadcaster_datagram_queue -> command_bundle_queue
         queue = self.broadcaster_datagram_queue
         while True:
-            identifier, data, address = await queue.async_get()
+            interface, data, address = await queue.async_get()
             if isinstance(data, Exception):
                 self.log.exception('Broadcaster failed to receive on %s',
-                                   identifier, exc_info=data)
+                                   interface, exc_info=data)
+                if sys.platform == 'win32':
+                    self.log.warning(
+                        'Re-initializing socket on interface %s', interface
+                    )
             else:
                 await self._broadcaster_recv_datagram(data, address)
 

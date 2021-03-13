@@ -1,6 +1,6 @@
-name: Python package
+name: caproto-actions
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
   build:
@@ -22,3 +22,25 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8
         pip install -r requirements-test.txt
+    - name: Lint with flake8
+      run: |
+        flake8 caproto
+    - name: Test with pytest
+      env:
+        CAPROTO_SKIP_MOTORSIM_TESTS: 1
+      run: |
+        coverage run --parallel-mode run_tests.py --timeout=100 -v --junitxml=junit/test-results.xml
+    - name: Coverage report
+      run: |
+        coverage combine --append
+        coverage report -m
+    - name: Leak report
+      run: |
+        python caproto/tests/view_leaks.py junit/test-results.xml
+
+    - name: Upload Unit Test Results
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: Unit Test Results (Python ${{ matrix.python-version }})
+        path: junit/test-results.xml
