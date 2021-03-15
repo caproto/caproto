@@ -1029,7 +1029,7 @@ class Context:
                 try:
                     pv = self.pvs[(name, priority)]
                 except KeyError:
-                    pv = PV(name, priority, self, None, None, timeout)
+                    pv = PV(name, priority, self, timeout)
                     names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
@@ -1576,8 +1576,7 @@ class PV:
                  '_timeout',
                  '__weakref__')
 
-    def __init__(self, name, priority, context, connection_state_callback,
-                 access_rights_callback, timeout):
+    def __init__(self, name, priority, context, timeout):
         """
         These must be instantiated by a Context, never directly.
         """
@@ -1593,15 +1592,6 @@ class PV:
         self.connection_state_callback = CallbackHandler(self)
         self.access_rights_callback = CallbackHandler(self)
         self._timeout = timeout
-
-        if connection_state_callback is not None:
-            self.connection_state_callback.add_callback(
-                connection_state_callback, run=True)
-
-        if access_rights_callback is not None:
-            self.access_rights_callback.add_callback(
-                access_rights_callback, run=True)
-
         self._circuit_manager = None
         self._channel = None
         self.subscriptions = {}
