@@ -21,6 +21,7 @@ needs_sphinx = '3.2.1'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
+    'sphinx.ext.inheritance_diagram',
     'sphinx.ext.intersphinx',
     'sphinx.ext.mathjax',
     'sphinx.ext.ifconfig',
@@ -127,6 +128,9 @@ todo_include_todos = False
 # a list of builtin themes.
 #
 html_theme = 'sphinx_rtd_theme'
+html_css_files = [
+    'inheritance.css',
+]
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -341,6 +345,16 @@ texinfo_documents = [
 #
 # texinfo_no_detailmenu = False
 
+# Inheritance diagram settings
+inheritance_graph_attrs = dict(
+    rankdir="TB",
+    size='""',
+)
+
+inheritance_alias = {
+}
+
+# Intersphinx settings for linking to other documentation:
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
 }

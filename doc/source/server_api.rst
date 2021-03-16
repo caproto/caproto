@@ -12,17 +12,47 @@ Core
 The following are the underlying, lowest-level classes for holding data which
 can be sent over an EPICS V3 channel in caproto.
 
+Numeric Data
+^^^^^^^^^^^^
+
+.. inheritance-diagram::
+    caproto.ChannelData
+    caproto.ChannelDouble
+    caproto.ChannelFloat
+    caproto.ChannelInteger
+    caproto.ChannelShort
+    :parts: 1
+
+.. autosummary::
+    :toctree: generated
+
+    caproto.ChannelData
+    caproto.ChannelDouble
+    caproto.ChannelFloat
+    caproto.ChannelInteger
+    caproto.ChannelShort
+
+String or Byte Data
+^^^^^^^^^^^^^^^^^^^
+
+.. inheritance-diagram::
+    caproto.ChannelByte
+    caproto.ChannelChar
+    caproto.ChannelEnum
+    caproto.ChannelString
+    :parts: 1
+
 .. autosummary::
     :toctree: generated
 
     caproto.ChannelByte
     caproto.ChannelChar
-    caproto.ChannelDouble
     caproto.ChannelEnum
-    caproto.ChannelFloat
-    caproto.ChannelInteger
-    caproto.ChannelShort
     caproto.ChannelString
+    :parts: 1
+
+Base Class
+^^^^^^^^^^
 
 The above share methods from their common (internal) base class
 :class:`~caproto._data.ChannelData`.
@@ -48,13 +78,23 @@ by whether or not they are read-only.
 Read/write
 ^^^^^^^^^^
 
+.. inheritance-diagram::
+    caproto.server.PvpropertyBoolEnum
+    caproto.server.PvpropertyByte
+    caproto.server.PvpropertyChar
+    caproto.server.PvpropertyData
+    caproto.server.PvpropertyDouble
+    caproto.server.PvpropertyEnum
+    caproto.server.PvpropertyString
+    :top-classes: caproto._data.ChannelData,caproto._data.ChannelDouble,caproto._data.ChannelFloat,caproto._data.ChannelInteger,caproto._data.ChannelShort,caproto._data.ChannelByte,caproto._data.ChannelChar,caproto._data.ChannelEnum,caproto._data.ChannelString
+    :parts: 1
+
 .. autosummary::
     :toctree: generated
 
     caproto.server.PvpropertyBoolEnum
     caproto.server.PvpropertyByte
     caproto.server.PvpropertyChar
-    caproto.server.PvpropertyData
     caproto.server.PvpropertyDouble
     caproto.server.PvpropertyEnum
     caproto.server.PvpropertyFloat
@@ -65,6 +105,20 @@ Read/write
 
 Read-only
 ^^^^^^^^^
+
+Read-only data classes mix in with
+:class:`~caproto.server.PvpropertyReadOnlyData`.
+
+.. inheritance-diagram::
+    caproto.server.PvpropertyBoolEnumRO
+    caproto.server.PvpropertyByteRO
+    caproto.server.PvpropertyCharRO
+    caproto.server.PvpropertyData
+    caproto.server.PvpropertyDoubleRO
+    caproto.server.PvpropertyEnumRO
+    caproto.server.PvpropertyStringRO
+    :top-classes: caproto._data.ChannelData,caproto._data.ChannelDouble,caproto._data.ChannelFloat,caproto._data.ChannelInteger,caproto._data.ChannelShort,caproto._data.ChannelByte,caproto._data.ChannelChar,caproto._data.ChannelEnum,caproto._data.ChannelString
+    :parts: 1
 
 .. autosummary::
     :toctree: generated
@@ -198,11 +252,16 @@ Helper functions
 Curio server
 ============
 
+
 Implementation classes
 ----------------------
 
 Classes built on top of the library-agnostic core, used to implement asyncio
 functionality.
+
+.. inheritance-diagram::
+    caproto.curio.server.Context
+    caproto.curio.server.VirtualCircuit
 
 .. autosummary::
     :toctree: generated
@@ -240,6 +299,10 @@ Implementation classes
 
 Classes built on top of the library-agnostic core, used to implement asyncio
 functionality.
+
+.. inheritance-diagram::
+    caproto.trio.server.Context
+    caproto.trio.server.VirtualCircuit
 
 .. autosummary::
     :toctree: generated
