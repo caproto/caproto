@@ -642,7 +642,9 @@ class SharedBroadcaster:
                             "Server is speaking some protocol version "
                             "older than 4.11. It will not report a "
                             "specific version until a channel is created. "
-                            "Quality of support is unknown.")
+                            "Quality of support is unknown (%s from %s).",
+                            command, address,
+                        )
 
                 elif isinstance(command, ca.SearchResponse):
                     cid = command.cid

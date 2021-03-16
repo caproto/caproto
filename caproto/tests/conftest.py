@@ -141,12 +141,12 @@ ioc_example_to_info = {
     "caproto.ioc_examples.io_interrupt": dict(
         group_cls='IOInterruptIOC',
         kwargs={},
-        marks=[],
+        marks=[pytest.mark.skipif(sys.platform == "win32", reason="No termios support")],
     ),
     "caproto.ioc_examples.macros": dict(
         group_cls='MacroifiedNames',
         kwargs={'macros': {'beamline': 'my_beamline', 'suffix': 'thing'}},
-        marks=[pytest.mark.skipif(sys.platform == "win32", reason="No termios support")],
+        marks=[],
     ),
     "caproto.ioc_examples.mini_beamline": dict(
         group_cls='MiniBeamline',
