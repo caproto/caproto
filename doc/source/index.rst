@@ -80,9 +80,6 @@ Why write something from scratch in Python instead of just wrapping those?
    * Zero-copy into ``ctypes`` and ``array.array`` or ``numpy.ndarray``.
    * Only pay a performance cost of human-friendly introspection if and when
      you use it.
-
-   For the numbers, see caproto's
-   `benchmarks <https://nsls-ii.github.io/caproto/bench/#/>`_.
 5. **Batteries Included**: Includes multiple server and client implementations
    with different concurrency strategies.
 
@@ -159,20 +156,21 @@ learning exercises.
    :maxdepth: 2
 
    install
+   clients
+   servers
+   environment_variables
+   shark
+   loggers
 
 .. toctree::
    :maxdepth: 2
-   :caption: EPICS Clients and Servers
+   :caption: IOCs
 
-   clients
    iocs
    records
-   servers
-   shark
-   loggers
    cookiecutter
    own_docs
-   environment_variables
+   server_api
 
 .. toctree::
    :maxdepth: 2

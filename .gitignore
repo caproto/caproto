@@ -15,3 +15,5 @@ pytest_bench.json
 .vscode/
 build/
 dist/
+/doc/source/generated
+/doc/source/pva/generated

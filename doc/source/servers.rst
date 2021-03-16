@@ -9,7 +9,7 @@ Servers
 Caproto includes three implementations of a Channel Access server for three
 different Python concurrency libraries:
 
-* asyncio (built in to Python)
+* asyncio (built in to Python, as part of its standard library)
 * curio
 * trio
 
@@ -19,12 +19,22 @@ introductory resources, suggested by a caproto user:
 * `Speed up your Python program with concurrency <https://realpython.com/python-concurrency/>`_
 * `Async IO in Python: A Complete Walkthrough <https://realpython.com/async-io-python/>`_
 
-The :doc:`IOC code <iocs>` abstracts out the particular server implementation,
-so IOC authors do not need to interact with the server API directly. The
-low-level server API is still experimental and subject to change, and it is not
-yet documented here. We refer interested developers to the source code in
-``caproto.asyncio.server``, ``caproto.curio.server``, and
-``caproto.trio.server``.
+
+Core API
+--------
+
+The core IOC code abstracts out the particular server implementation, so IOC
+authors do not need to interact with the server API directly. The core server
+API remains a work-in-progress and is subject to change, though as of 2021
+it is likely mostly stable.
+
+See more details in :doc:`server_api`.
+
+Writing your own IOCs
+---------------------
+
+There is an entire chapter in this documentation dedicated to EPICS IOCs and
+the related tools we have.  Take a look at :doc:`iocs` for more information.
 
 
 Running multiple servers on one host
