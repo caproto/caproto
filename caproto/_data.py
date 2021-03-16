@@ -1246,7 +1246,7 @@ class ChannelNumeric(ChannelData):
 
 class ChannelShort(ChannelNumeric):
     """
-    16-bit short integer data and metadata which can be sent over a channel.
+    16-bit SHORT integer data and metadata which can be sent over a channel.
 
     May be a single value or an array of values.
 
@@ -1294,7 +1294,7 @@ class ChannelShort(ChannelNumeric):
 
 class ChannelInteger(ChannelNumeric):
     """
-    32-bit short integer data and metadata which can be sent over a channel.
+    32-bit LONG integer data and metadata which can be sent over a channel.
 
     May be a single value or an array of values.
 
