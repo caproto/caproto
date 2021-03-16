@@ -1155,11 +1155,18 @@ client writes.
 
 .. ipython:: python
 
+    import pathlib
+    import tempfile
+
+    # /tmp on Linux, %TEMP% on Windows, /var/folders on macOS, ...
+    ioc_write_path = pathlib.Path(tempfile.gettempdir()) / 'A'
+
     a, b = ctx.get_pvs('custom_write:A', 'custom_write:B')
     a.write(5)
-    print(open('/tmp/A').read())
+    print(open(ioc_write_path, 'rt').read())
     a.write(10)
-    print(open('/tmp/A').read())
+    print(open(ioc_write_path, 'rt').read())
+
 
 It is easy to imagine extending this example to write a socket or a serial
 device rather than a file.
