@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import time
 
@@ -10,6 +11,12 @@ from caproto.sync.client import read as sync_read
 from . import conftest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
+
+try:
+    import numpy
+except ImportError:
+    # Used in pytest.mark.skipif() below.
+    numpy = None
 
 
 def test_asyncio_client_example(ioc):
@@ -31,15 +38,76 @@ def test_thread_client_example(curio_server):
         kernel.run(server_runner, client)
 
 
-# The following asynchronous functions are used as parameters in the
-# parameterized tests test_curio_server_example.
+ioc_examples = [
+    pytest.param(
+        "caproto.tests.ioc_all_in_one", "MyPVGroup",
+        dict(macros={"macro": "expanded"}),
+    ),
+    pytest.param("caproto.ioc_examples.chirp", "Chirp", {"ramp_rate": 0.75}),
+    pytest.param("caproto.ioc_examples.custom_write", "CustomWrite", {}),
+    pytest.param("caproto.ioc_examples.decay", "Decay", {}),
+    pytest.param("caproto.tests.ioc_inline_style", "InlineStyleIOC", {}),
+    pytest.param("caproto.ioc_examples.io_interrupt", "IOInterruptIOC", {}),
+    pytest.param(
+        "caproto.ioc_examples.macros",
+        "MacroifiedNames",
+        dict(macros={"beamline": "my_beamline", "suffix": "thing"}),
+        # no termios support; skip on windows
+        marks=pytest.mark.skipif(sys.platform == "win32", reason="No termios support"),
+    ),
+    pytest.param(
+        "caproto.ioc_examples.mini_beamline",
+        "MiniBeamline",
+        {},
+        marks=pytest.mark.skipif(numpy is None, reason="Requires numpy"),
+    ),
+    pytest.param("caproto.ioc_examples.random_walk", "RandomWalkIOC", {}),
+    pytest.param(
+        "caproto.ioc_examples.pathological.reading_counter", "ReadingCounter", {}
+    ),
+    pytest.param("caproto.ioc_examples.rpc_function", "MyPVGroup", {}),
+    pytest.param("caproto.ioc_examples.scalars_and_arrays", "ArrayIOC", {}),
+    pytest.param("caproto.ioc_examples.scan_rate", "ScanRateIOC", {}),
+    pytest.param("caproto.ioc_examples.setpoint_rbv_pair", "Group", {}),
+    pytest.param("caproto.ioc_examples.simple", "SimpleIOC", {}),
+    pytest.param(
+        "caproto.ioc_examples.startup_and_shutdown_hooks", "StartupAndShutdown", {}
+    ),
+    pytest.param("caproto.ioc_examples.subgroups", "MyPVGroup", {}),
+    pytest.param(
+        "caproto.ioc_examples.thermo_sim",
+        "Thermo",
+        {},
+        marks=pytest.mark.skipif(numpy is None, reason="Requires numpy"),
+    ),
+    pytest.param("caproto.ioc_examples.too_clever.trigger_with_pc", "TriggeredIOC", {}),
+    pytest.param("caproto.ioc_examples.worker_thread", "WorkerThreadIOC", {}),
+    pytest.param("caproto.ioc_examples.worker_thread_pc", "WorkerThreadIOC", {}),
+    pytest.param(
+        "caproto.ioc_examples.too_clever.caproto_to_ophyd",
+        "Group",
+        {},
+        marks=[
+            pytest.mark.flaky(reruns=10, reruns_delay=2),
+            pytest.mark.skipif(sys.platform == "win32", reason="No win32 support"),
+            pytest.mark.skipif(numpy is None, reason="Requires numpy"),
+        ],
+    ),
+    pytest.param(
+        "caproto.ioc_examples.too_clever.areadetector_image",
+        "DetectorGroup",
+        {},
+        marks=pytest.mark.xfail(reason="Can be flaky"),
+    ),
+]
 
 
-# See test_ioc_example and test_flaky_ioc_examples, below.
-def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
-                       prefix, async_lib='curio'):
-    import subprocess
-
+@pytest.mark.flaky(reruns=2, reruns_delay=2)
+@pytest.mark.parametrize("module_name, pvdb_class_name, class_kwargs",
+                         ioc_examples)
+@pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
+def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
+                      prefix, async_lib):
     from caproto.server import PvpropertyReadOnlyData
     from caproto.sync.client import read, write
 
@@ -61,7 +129,6 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
     stdin = (subprocess.DEVNULL if 'io_interrupt' in module_name
              else None)
 
-    print('stdin=', stdin)
     run_example_ioc(module_name, request=request,
                     args=['--prefix', prefix, '--async-lib', async_lib],
                     pv_to_check=pv_to_check,
@@ -107,98 +174,24 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         print(f'Read {pv} = {value}')
 
 
-# TODO sort out why these are flaky on travis
-@pytest.mark.flaky(reruns=2, reruns_delay=2)
-@pytest.mark.parametrize(
-    'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.tests.ioc_all_in_one', 'MyPVGroup',
-      dict(macros={'macro': 'expanded'})),
-     ('caproto.ioc_examples.chirp', 'Chirp', {'ramp_rate': 0.75}),
-     ('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
-     ('caproto.ioc_examples.decay', 'Decay', {}),
-     ('caproto.tests.ioc_inline_style', 'InlineStyleIOC', {}),
-     ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
-     ('caproto.ioc_examples.macros', 'MacroifiedNames',
-      dict(macros={'beamline': 'my_beamline', 'suffix': 'thing'})),
-     ('caproto.ioc_examples.mini_beamline', 'MiniBeamline', {}),
-     ('caproto.ioc_examples.random_walk', 'RandomWalkIOC', {}),
-     ('caproto.ioc_examples.pathological.reading_counter', 'ReadingCounter', {}),
-     ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
-     ('caproto.ioc_examples.scalars_and_arrays', 'ArrayIOC', {}),
-     ('caproto.ioc_examples.scan_rate', 'ScanRateIOC', {}),
-     ('caproto.ioc_examples.setpoint_rbv_pair', 'Group', {}),
-     ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
-     ('caproto.ioc_examples.startup_and_shutdown_hooks', 'StartupAndShutdown', {}),
-     ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
-     ('caproto.ioc_examples.thermo_sim', 'Thermo', {}),
-     ('caproto.ioc_examples.too_clever.trigger_with_pc', 'TriggeredIOC', {}),
-     ('caproto.ioc_examples.worker_thread', 'WorkerThreadIOC', {}),
-     ('caproto.ioc_examples.worker_thread_pc', 'WorkerThreadIOC', {}),
-     ]
-)
-@pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
-def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
-                      prefix, async_lib):
-    skip_on_windows = (
-        # no areadetector ioc
-        'caproto.ioc_examples.areadetector_image',
-        # no termios support
-        'caproto.ioc_examples.io_interrupt',
-    )
-
-    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',
-                        'caproto.ioc_examples.thermo_sim')
-
-    if sys.platform == 'win32' and module_name in skip_on_windows:
-        raise pytest.skip('win32 TODO')
-    if module_name in skip_if_no_numpy:
-        pytest.importorskip('numpy')
-
-    return _test_ioc_examples(request, module_name, pvdb_class_name,
-                              class_kwargs, prefix, async_lib)
-
-
-# TO DO --- These really should not be flaky!
-@pytest.mark.flaky(reruns=10, reruns_delay=2)
-# These tests require numpy.
-@pytest.mark.skipif(sys.platform == 'win32',
-                    reason='win32 AD IOC')
-@pytest.mark.parametrize(
-    'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.too_clever.caproto_to_ophyd', 'Group', {}),
-     pytest.param(
-         'caproto.ioc_examples.too_clever.areadetector_image', 'DetectorGroup', {},
-         marks=pytest.mark.xfail),
-     ])
-def test_special_ioc_examples(request, module_name, pvdb_class_name,
-                              class_kwargs, prefix):
-    pytest.importorskip('numpy')
-    return _test_ioc_examples(request, module_name, pvdb_class_name,
-                              class_kwargs, prefix)
-
-
-# skip on windows - no areadetector ioc there just yet
-@pytest.mark.skipif(sys.platform == 'win32',
-                    reason='win32 AD IOC')
-@pytest.mark.xfail
+@pytest.mark.xfail(reason="Flaky, and AD IOC may not be running on host")
 def test_areadetector_generate():
     pytest.importorskip('numpy')
-    from caproto.ioc_examples import areadetector_image
+    from caproto.ioc_examples.too_clever import areadetector_image
 
     # smoke-test the generation code
     areadetector_image.generate_detector_code()
 
 
-def test_typhon_example(request, prefix):
+def test_typhos_example(request, prefix):
     pytest.importorskip('numpy')
     from .conftest import run_example_ioc
     run_example_ioc('caproto.ioc_examples.too_clever.caproto_to_ophyd', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}random1')
 
-    from caproto.ioc_examples.too_clever import caproto_to_typhon
-    caproto_to_typhon.pydm = None
-
-    caproto_to_typhon.run_typhon(prefix=prefix)
+    from caproto.ioc_examples.too_clever import caproto_to_typhos
+    caproto_to_typhos.pydm = None
+    caproto_to_typhos.run_typhos(prefix=prefix)
 
 
 def test_records(request, prefix):
