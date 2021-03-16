@@ -45,6 +45,8 @@
 
 .. currentmodule:: {{ module }}
 
+.. inheritance-diagram:: {{ objname }}
+
 .. autoclass:: {{ objname }}
 
     .. if not using autodoc, add this here: automethod:: __init__

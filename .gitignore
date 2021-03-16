@@ -1,5 +1,5 @@
 *.swp
-doc/source/_static
+doc/source/_static/command*
 caproto/__pycache__
 caproto.egg-info
 __pycache__/
