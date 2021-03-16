@@ -14,5 +14,5 @@ pytest-timeout
 pytest-rerunfailures
 pytest-xdist
 ophyd
-trio
+trio >=0.18.0
 git+https://github.com/klauer/catvs.git@py3k

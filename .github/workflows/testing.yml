@@ -19,9 +19,11 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install caproto
-      shell: bash -l {0}
       run: |
-        source .ci/install.sh test
+        git fetch --tags
+        python -m pip install --upgrade pip
+        python -m pip install -r "requirements-test.txt"
+        python -m pip install .
 
     - name: Lint with flake8
       run: |
