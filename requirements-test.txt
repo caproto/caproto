@@ -3,7 +3,6 @@ coverage
 curio
 dpkt
 epics-pypdb
-flake8
 netifaces
 parsimonious
 pyepics >=3.4.2

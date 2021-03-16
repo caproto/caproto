@@ -1,9 +1,9 @@
-name: caproto-actions
+name: GH Actions Testing
 
 on: [push, pull_request]
 
 jobs:
-  build:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,10 +24,6 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install -r "requirements-test.txt"
         python -m pip install .
-
-    - name: Lint with flake8
-      run: |
-        flake8 caproto
 
     - name: Test with pytest
       env:

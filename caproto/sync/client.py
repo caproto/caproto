@@ -5,6 +5,7 @@
 import getpass
 import inspect
 import logging
+import random
 import selectors
 import socket
 import threading  # just to make callback processing thread-safe
@@ -71,9 +72,11 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             f"Failed to send to {local_address}:{repeater_port}") from exc
 
     logger.debug("Searching for %r....", pv_name)
+    search_cid = random.randint(0, 65535)
     commands = (
         ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
-        ca.SearchRequest(pv_name, 0, ca.DEFAULT_PROTOCOL_VERSION))
+        ca.SearchRequest(pv_name, search_cid, ca.DEFAULT_PROTOCOL_VERSION),
+    )
     bytes_to_send = b.send(*commands)
     tags = {'role': 'CLIENT',
             'our_address': b.client_address,
@@ -140,7 +143,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             commands = b.recv(bytes_received, address)
             b.process_commands(commands)
             for command in commands:
-                if isinstance(command, ca.SearchResponse) and command.cid == 0:
+                if isinstance(command, ca.SearchResponse) and command.cid == search_cid:
                     address = ca.extract_address(command)
                     logger.debug('Found %r at %s:%d', pv_name, *address)
                     return address
