@@ -75,7 +75,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         (ca.ChannelString, ['USD']),
         (ca.ChannelChar, 'USD'),
         (ca.ChannelByte, b'USD'),
-        (ca.ChannelEnum, [b'no']),
+        (ca.ChannelEnum, [0]),
     ]
 
     skip_pvs = [('ophyd', ':exit')]
