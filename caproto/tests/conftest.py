@@ -117,6 +117,240 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     return p
 
 
+ioc_example_to_info = {
+    "caproto.ioc_examples.chirp": dict(
+        group_cls='Chirp',
+        kwargs={'ramp_rate': 0.75},
+        marks=[],
+    ),
+    "caproto.ioc_examples.custom_write": dict(
+        group_cls='CustomWrite',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.decay": dict(
+        group_cls='Decay',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.enums": dict(
+        group_cls='EnumIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.io_interrupt": dict(
+        group_cls='IOInterruptIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.macros": dict(
+        group_cls='MacroifiedNames',
+        kwargs={'macros': {'beamline': 'my_beamline', 'suffix': 'thing'}},
+        marks=[pytest.mark.skipif(sys.platform == "win32", reason="No termios support")],
+    ),
+    "caproto.ioc_examples.mini_beamline": dict(
+        group_cls='MiniBeamline',
+        kwargs={},
+        marks=[pytest.mark.skipif(numpy is None, reason="Requires numpy")],
+    ),
+    "caproto.ioc_examples.pathological.reading_counter": dict(
+        group_cls='ReadingCounter',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.random_walk": dict(
+        group_cls='RandomWalkIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.rpc_function": dict(
+        group_cls='MyPVGroup',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.scalars_and_arrays": dict(
+        group_cls='ArrayIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.scan_rate": dict(
+        group_cls='ScanRateIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.setpoint_rbv_pair": dict(
+        group_cls='Group',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.simple": dict(
+        group_cls='SimpleIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.startup_and_shutdown_hooks": dict(
+        group_cls='StartupAndShutdown',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.records": dict(
+        group_cls='RecordMockingIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.records_subclass": dict(
+        group_cls='RecordMockingIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.subgroups": dict(
+        group_cls='MyPVGroup',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.thermo_sim": dict(
+        group_cls='Thermo',
+        kwargs={},
+        marks=[pytest.mark.skipif(numpy is None, reason="Requires numpy")]
+    ),
+    "caproto.ioc_examples.too_clever.areadetector_image": dict(
+        group_cls='DetectorGroup',
+        kwargs={},
+        marks=pytest.mark.xfail(reason="Can be flaky")
+    ),
+    "caproto.ioc_examples.too_clever.caproto_to_ophyd": dict(
+        group_cls='Group',
+        kwargs={},
+        marks=[
+            pytest.mark.flaky(reruns=2, reruns_delay=2),
+            pytest.mark.skipif(sys.platform == "win32", reason="No win32 support"),
+            pytest.mark.skipif(numpy is None, reason="Requires numpy"),
+        ]
+    ),
+    "caproto.ioc_examples.too_clever.trigger_with_pc": dict(
+        group_cls='TriggeredIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.worker_thread": dict(
+        group_cls='WorkerThreadIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.ioc_examples.worker_thread_pc": dict(
+        group_cls='WorkerThreadIOC',
+        kwargs={},
+        marks=[],
+    ),
+    "caproto.tests.ioc_all_in_one": dict(
+        group_cls='MyPVGroup',
+        kwargs={'macros': {'macro': 'expanded'}},
+        marks=[],
+    ),
+    "caproto.tests.ioc_inline_style": dict(
+        group_cls='InlineStyleIOC',
+        kwargs={},
+        marks=[],
+    ),
+}
+
+
+def ioc_name_as_param(module_name: str) -> pytest.param:
+    """Take an IOC module name and return a pytest.param for it."""
+    info = ioc_example_to_info[module_name]
+    return pytest.param(
+        module_name,
+        marks=info["marks"],
+    )
+
+
+def parametrize_iocs(*module_names):
+    """
+    Decorator to mark a test as using the given IOC examples.
+
+    Test should have an "ioc_name" argument.  Usage:
+
+    .. code:: python
+
+        @conftest.parametrize_iocs(
+            "caproto.ioc_examples.simple"
+        )
+        def test_name(request, ioc_name):
+            ...
+    """
+    return pytest.mark.parametrize(
+        'ioc_name', [
+            ioc_name_as_param(module_name)
+            for module_name in module_names
+        ]
+    )
+
+
+def run_example_ioc_by_name(
+    module_name: str,
+    async_lib: str = 'asyncio',
+    request=None
+) -> SimpleNamespace:
+    """
+    Run an example, given its module name.
+
+    Parameters
+    ----------
+    module_name : str
+        The module name of the example.
+    async_lib : str, optional
+        The async library to use, defaulting to asyncio.
+    request : pytest.Request
+        The request fixture, if available.
+    """
+    info = ioc_example_to_info[module_name]
+    if request is not None:
+        for marker in (info["marks"] or []):
+            # applymarker works for some things, but not all:
+            request.applymarker(marker)
+            # It's easy enough to check skipif/skip, though:
+            if marker.mark.name == "skipif":
+                condition, = marker.args
+                if condition:
+                    pytest.skip(marker.kwargs["reason"])
+            if marker.mark.name == "skip":
+                pytest.skip(marker.kwargs["reason"])
+
+    module = __import__(
+        module_name, fromlist=(module_name.rsplit('.', 1)[-1], )
+    )
+
+    prefix = new_prefix()
+
+    pvdb_class = getattr(module, info["group_cls"])
+    pvdb = pvdb_class(prefix=prefix, **info["kwargs"]).pvdb
+    pvs = list(pvdb.keys())
+    pv_to_check = pvs[0]
+
+    stdin = (
+        subprocess.DEVNULL if 'io_interrupt' in module_name else None
+    )
+
+    process = run_example_ioc(
+        module_name,
+        request=request,
+        pv_to_check=pv_to_check,
+        args=('--prefix', prefix, '--async-lib', async_lib),
+        stdin=stdin,
+    )
+
+    print(f'{module_name} IOC now running')
+    return SimpleNamespace(
+        process=process,
+        prefix=prefix,
+        name=pvdb_class.__name__,
+        pvs=pvs,
+        type='caproto',
+        pvdb=pvdb,
+        module=module,
+    )
+
+
 def poll_readiness(pv_to_check, attempts=5, timeout=1, process=None):
     logger.debug(f'Checking PV {pv_to_check}')
     start_repeater()
@@ -161,10 +395,14 @@ def run_softioc(request, db, additional_db=None, **kwargs):
         raise err
 
 
+def new_prefix() -> str:
+    """Random PV prefix for a server."""
+    return str(uuid.uuid4())[:8] + ':'
+
+
 @pytest.fixture(scope='function')
 def prefix():
-    'Random PV prefix for a server'
-    return str(uuid.uuid4())[:8] + ':'
+    return new_prefix()
 
 
 def _epics_base_ioc(prefix, request):
