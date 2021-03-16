@@ -16,8 +16,8 @@ most features and testing behind it. We generally recommend this one.
 The :doc:`pyepics-compat-client` should only be used if you want to have
 compatibility with some existing pyepics-based code.
 
-The :doc:`async-clients` are experimental, not as robust or as feature-complete
-as the threading client. They may be reworked and built out in the future.
+Use the :doc:`async-clients` if you wish to write client code that takes
+advantage of cooperative multitasking with asyncio.
 
 The :doc:`command-line-client` provides commandline tools (``caproto-get``,
 ``caproto-put``, ...) that are drop-in replacements for their analogues in

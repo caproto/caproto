@@ -7,8 +7,8 @@ Records
 .. currentmodule:: caproto.server.records
 
 These Python classes make it easy to run IOCs that have the record and field
-layout and linking of common EPICS database records. The source code of these
-"records" was auto-generated from a reference implementation available `here
+layout of common EPICS database records. The source code of these "records" was
+auto-generated from a reference implementation available `here
 <https://github.com/caproto/reference-dbd>`_.
 
 Please note that none of the classes listed here implement the full

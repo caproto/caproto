@@ -254,37 +254,6 @@ use the appropriate `ChannelType` directly:
      - :class:`~.server.PvpropertyChar`
      - :class:`~.ChannelChar`
 
-These are the special classes pvproperty uses:
-
-.. autosummary::
-    :toctree: generated
-
-    caproto.server.PvpropertyBoolEnum
-    caproto.server.PvpropertyByte
-    caproto.server.PvpropertyChar
-    caproto.server.PvpropertyDouble
-    caproto.server.PvpropertyEnum
-    caproto.server.PvpropertyFloat
-    caproto.server.PvpropertyInteger
-    caproto.server.PvpropertyShort
-    caproto.server.PvpropertyString
-
-
-The following are the underlying, lowest-level classes for holding data which
-can be sent over an EPICS V3 channel in caproto:
-
-.. autosummary::
-    :toctree: generated
-
-    caproto.ChannelByte
-    caproto.ChannelChar
-    caproto.ChannelDouble
-    caproto.ChannelEnum
-    caproto.ChannelFloat
-    caproto.ChannelInteger
-    caproto.ChannelShort
-    caproto.ChannelString
-
 
 Integers and floats
 ^^^^^^^^^^^^^^^^^^^

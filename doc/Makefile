@@ -47,6 +47,8 @@ help:
 .PHONY: clean
 clean:
 	rm -rf $(BUILDDIR)/*
+	rm -rf source/generated
+	rm -rf source/pva/generated
 
 .PHONY: html
 html:
