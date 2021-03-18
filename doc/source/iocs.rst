@@ -189,6 +189,145 @@ pvproperty
 over EPICS Channel Access and provides easy-to-use hooks for reacting to
 certain events -- by hooking user-provided Python methods.
 
+
+Basic configuration
+-------------------
+
+Only one keyword argument is truly required: either ``value`` or ``dtype``.
+
+``value`` or ``dtype``
+^^^^^^^^^^^^^^^^^^^^^^
+
+If you specify a ``value`` keyword argument, the ``pvproperty`` will assume its
+data type based on the supported data types table.  That is, if you give a
+value of ``1``, dtype will be assumed to be ``int`` and the pvproperty will
+produce a :class:`~.server.PvpropertyInteger` (:class:`.ChannelInteger`).
+
+Alternatively, ``dtype`` may be specified directly as either a `ChannelType`
+such as ``dtype=ChannelType.LONG`` or equivalently the built-in Python type
+``dtype=int``.  The default value will be chosen from the PVGroup's
+``default_values`` dictionary:
+
+.. code:: python
+
+    class MyPVGroup(PVGroup):
+        default_values = {
+            str: '',
+            int: 0,
+            float: 0.0,
+            bool: False,
+
+            ChannelType.STRING: '',
+            ChannelType.INT: 0,
+            ChannelType.LONG: 0,
+            ChannelType.DOUBLE: 0.0,
+            ChannelType.FLOAT: 0.0,
+            ChannelType.ENUM: 0,
+            ChannelType.CHAR: '',
+        }
+
+
+``name``
+^^^^^^^^
+
+Properties in Python are a bit magical in their own right - ``property``, when
+defined on a class, is aware of the name you have given it (by way of the
+``descriptor`` protocol).
+
+This means that ``pvproperty`` can give a reasonable default for its PV name.
+You are free to customize this, however, by specifying ``name="PV:SUFFIX"``
+where ``PV:SUFFIX`` is your desired suffix to be appended to the parent
+``PVGroup`` prefix.
+
+``doc``
+^^^^^^^^
+
+Please consider documenting what each individual property does by adding a
+human-understandable explanation string to the ``doc`` keyword argument.
+
+This will be picked up by automatic documentation generation utilities
+and added to its parent group's ``pvproperty`` table.
+
+Also, if using a ``record``, your ``doc`` string will automatically be sent
+over EPICS with the ``.DESC`` field.
+
+.. code:: python
+
+    my_property = pvproperty(value=1.0, record='ai', doc="My property")
+
+.. code:: bash
+
+    $ caget prefix:my_property.DESC
+    prefix:my_property.DESC        My property
+
+
+``alarm_group``
+^^^^^^^^^^^^^^^
+
+By default, pvproperties in a given PVGroup instance share the same alarm
+instance.
+
+This is usually a reasonable guess for small groups of PVs.  For finer-grained
+customization, the easiest way to change this functionality is to specify a
+per-pvproperty alarm group using the ``alarm_group`` keyword argument.  It
+expects a string identifier, which should be reused on all other pvproperties
+that are to share the alarm instance.
+
+``max_length``
+^^^^^^^^^^^^^^
+
+This is the length of the array (when used with integers, floats) or the
+number of characters in a character or byte string.
+
+By default, it will be the length of the ``value`` that is passed in - or ``1``
+for scalar values.
+
+EPICS clients expect to know the maximum length of an array at connection
+time and may not properly handle it changing dynamically.  As such,
+``pvproperty`` allows you to customize the size at property definition-time.
+
+``record``
+^^^^^^^^^^
+
+``pvproperty`` allows you to pretend your value has common EPICS record fields.
+For example, it is possible to report a given property as an analog input
+(``ai``) record:
+
+.. code:: python
+
+    my_property = pvproperty(value=1.0, record='ai', doc="My property")
+
+
+More on this in a later section.
+
+
+Hooks
+^^^^^
+
+``put``, ``startup``, ``shutdown``, ``scan`` may be passed in directly with
+the ``pvproperty`` for reuse among multiple properties or to avoid the
+decorator syntax (the generally preferred syntax, shown in detail in later
+sections).
+
+This can look like:
+
+.. code:: python
+
+    async def write_hook(self, instance, value):
+        print(f"Wrote {value} to {instance.name}")
+
+    pv_a = pvproperty(put=single_write, value='A', doc="The first PV")
+    pv_b = pvproperty(put=single_write, value='A', doc="The second PV")
+
+
+Other arguments
+^^^^^^^^^^^^^^^
+
+Other arguments will be passed to the ``ChannelData`` instance as-is.   For
+example, these allow you to customize special classes such as ``ChannelEnum``
+which may take in ``enum_strings`` - which would, of course, be unacceptable
+for a floating point value.
+
 Supported data types
 --------------------
 
@@ -254,7 +393,6 @@ use the appropriate `ChannelType` directly:
      - :class:`~.server.PvpropertyChar`
      - :class:`~.ChannelChar`
 
-
 Integers and floats
 ^^^^^^^^^^^^^^^^^^^
 
@@ -265,7 +403,41 @@ Strings
 ^^^^^^^
 
 Strings are a bit complicated when it comes to EPICS and caproto follows suit.
-See the "how to" section below for more information on long strings.
+
+
+At minimum, the following will work to store up to 40 character strings:
+
+.. code:: python
+
+    my_string = pvproperty(
+        # The default value:
+        value="String value",
+        # Document it!
+        doc="Indicator as to what this does.",
+    )
+
+
+A more complete specification looks like the following. See the "how to"
+section below for more details on why the following is the preferred method for
+strings.
+
+.. code:: python
+
+    my_string = pvproperty(
+        # The default value:
+        value="String value",
+        # Document it!
+        doc="Indicator as to what this does.",
+        # Configure the PV suffix, if different than ``my_string``:
+        name=":PV:SUFFIX",
+        # Optionally configure the encoding:
+        string_encoding='utf-8',
+        # Ensure that this is marked as "report_as_string" (** optional)
+        report_as_string=True,
+        # Optionally specify how long the string can get - the default is
+        # the length of the provided value.
+        max_length=255,
+    )
 
 
 Enums
@@ -508,20 +680,6 @@ change the rate to common EPICS-defined ones.
     :toctree: generated
 
     caproto.server.scan_wrapper
-
-
-Records
--------
-
-``pvproperty`` allows you to pretend your value has common EPICS record fields.
-For example, it is possible to report a given property as an analog input
-(``ai``) record:
-
-.. code:: python
-
-    my_property = pvproperty(value=1.0, record='ai')
-
-More on this in a later section.
 
 API
 ---
