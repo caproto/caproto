@@ -253,18 +253,6 @@ class SharedBroadcaster:
         if isinstance(command, ca.Beacon):
             address = (command.address, command.server_port)
             self.results.mark_server_alive(address, command.beacon_id)
-        elif isinstance(command, ca.VersionResponse):
-            # Per the specification, in CA < 4.11, VersionResponse does
-            # not include minor version number (it is always 0) and is
-            # interpreted as an echo command that carries no data.
-            # Version exchange is performed immediately after channel
-            # creation.
-            if command.version == 0:
-                self.log.warning(
-                    "Server is speaking some protocol version "
-                    "older than 4.11. It will not report a "
-                    "specific version until a channel is created. "
-                    "Quality of support is unknown.")
         elif isinstance(command, ca.SearchResponse):
             address = ca.extract_address(command)
             self.server_protocol_versions[address] = command.version
