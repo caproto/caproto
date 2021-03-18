@@ -27,6 +27,12 @@ Fixed
   to ``False`` when using compatible numpy arrays.  (#731)
 - ``safe_getsockname`` was stashing references to sockets and not allowing
   them to be garbage collected. (#739)
+- ``data_type`` values are now validated against ``ChannelType`` when used in
+  commands. (#742)
+- Raise ``RemoteProtocolError`` with more user-friendly messages when invalid
+  packets or those with invalid command IDs are received. (#743)
+- Synchronous client search erroneously used the same search ID for multiple
+  requests. (#754)
 
 Added
 -----
@@ -43,6 +49,9 @@ Added
   curio, trio).  By convention, consider using ``__ainit__`` for this hook.
   (#739)
 - Added ``monitor`` helper to the asyncio client. (#739)
+- Now using GitHub actions for automated testing on Windows and macOS,
+  with fixed documentation building and releasing to PyPI.  This was defunct
+  since Travis CI changed its payment model. (#749, #754)
 
 Changed
 -------
@@ -66,6 +75,13 @@ Changed
 - Old and bad form example ``all_in_one`` moved to testing area.
 - Old and bad form example ``inline_style`` moved to testing area.
 - Example using ChannelData ``type_varieties`` moved to "advanced"
+- On-class-definition validation of ``PvpropertyData`` keyword arguments was
+  removed to reduce complexity.  ``CaprotoRuntimeError`` will be raised on
+  instantiation for pvproperties with bad keyword arguments, indicating
+  the cause and full ``PVSpec`` information. (#741)
+- Warning messages when old CA clients are detected have been removed.  The
+  reasoning behind the message was likely flawed and will require further
+  investigation.  In the meantime, this will reduce log spam.  (#757, #761)
 
 
 v0.7.1 (2020-01-13)
