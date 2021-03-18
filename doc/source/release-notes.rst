@@ -79,6 +79,9 @@ Changed
   removed to reduce complexity.  ``CaprotoRuntimeError`` will be raised on
   instantiation for pvproperties with bad keyword arguments, indicating
   the cause and full ``PVSpec`` information. (#741)
+- Warning messages when old CA clients are detected have been removed.  The
+  reasoning behind the message was likely flawed and will require further
+  investigation.  In the meantime, this will reduce log spam.  (#757, #761)
 
 
 v0.7.1 (2020-01-13)
