@@ -90,6 +90,7 @@ def _read_response_to_pyepics(full_type, command, enum_strings=None):
         value = [v.decode(STR_ENC).strip() for v in value]
         if len(value) == 1:
             value = value[0]
+        info['value'] = value
         info['char_value'] = value
     elif full_type in ca.enum_types:
         enum_strings = info.get('enum_strs', None) or enum_strings
