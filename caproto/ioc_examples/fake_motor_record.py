@@ -133,7 +133,7 @@ class FakeMotor(PVGroup):
     async def motor(self, instance, async_lib):
         # Start the simulator:
         await motor_record_simulator(
-            self.motor, async_lib,
+            self.motor, async_lib, self.defaults,
             tick_rate_hz=self.tick_rate_hz,
         )
 
