@@ -2,7 +2,16 @@
 Release History
 ***************
 
-v0.8.0 (2021-03-??)
+v0.8.1 (2021-03-??)
+===================
+
+Fixed
+-----
+
+- pyepics compatibility layer should no longer leak a byte string ``value``
+  through for DBR_STRING ``PV`` instances.  (#710, #763)
+
+v0.8.0 (2021-03-18)
 ===================
 
 Fixed
