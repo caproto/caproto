@@ -252,6 +252,11 @@ ioc_example_to_info = {
         kwargs={},
         marks=[],
     ),
+    "caproto.ioc_examples.advanced.raw_timestamp": dict(
+        group_cls='TimestampIOC',
+        kwargs={},
+        marks=[],
+    ),
 }
 
 
