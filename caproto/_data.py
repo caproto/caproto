@@ -4,7 +4,6 @@
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
 import copy
-import datetime
 import time
 import weakref
 from collections import defaultdict, namedtuple
@@ -919,11 +918,6 @@ class ChannelData:
 
         if publish:
             await self.publish(SubscriptionType.DBE_PROPERTY)
-
-    @property
-    def datetime(self) -> datetime.datetime:
-        """Current timestamp as a ``datetime`` instance."""
-        return datetime.datetime.fromtimestamp(self.timestamp)
 
     @property
     def timestamp(self) -> float:
