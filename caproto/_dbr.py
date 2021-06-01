@@ -316,7 +316,7 @@ class TimeStamp(DbrTypeBase):
 
     def as_datetime(self):
         'Timestamp as a datetime'
-        return datetime.datetime.utcfromtimestamp(self.timestamp)
+        return datetime.datetime.fromtimestamp(self.timestamp)
 
     def __iter__(self):
         return iter((self.secondsSinceEpoch, self.nanoSeconds))

@@ -16,7 +16,8 @@ def test_timestamp_now():
 def test_timestamp_basic():
     intval = ca.ChannelInteger(value=5)
     # Try the datetime interface:
-    assert abs(intval.datetime.timestamp() - intval.timestamp) < 1.
+    from_dt = intval.epics_timestamp.as_datetime().timestamp()
+    assert abs(from_dt - intval.timestamp) < 1.
 
 
 def test_timestamp_raw_access():
