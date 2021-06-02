@@ -174,6 +174,20 @@ def test_pvproperty_string_array(request, ioc_name):
     assert sync.read(array_string_pv).data == [b'array', b'of', b'strings']
 
 
+def test_raw_timestamp(request):
+    info = conftest.run_example_ioc_by_name(
+        "caproto.ioc_examples.advanced.raw_timestamp",
+        request=request
+    )
+    print("Triggering an update of value.")
+    sync.write(f'{info.prefix}update', 1, notify=True)
+    time.sleep(0.5)
+    print("Reading back ``value``...")
+    data = sync.read(f'{info.prefix}value', data_type='time')
+    print(f"data={data} stamp={data.metadata.stamp}")
+    assert data.metadata.stamp.nanoSeconds == 2 ** 16 - 1
+
+
 @conftest.parametrize_iocs(
     "caproto.ioc_examples.enums"
 )

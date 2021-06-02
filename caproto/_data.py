@@ -14,9 +14,9 @@ from ._commands import parse_metadata
 from ._constants import MAX_ENUM_STATES, MAX_ENUM_STRING_SIZE
 from ._dbr import (DBR_STSACK_STRING, DBR_TYPES, AccessRights, AlarmSeverity,
                    AlarmStatus, ChannelType, GraphicControlBase,
-                   SubscriptionType, _channel_type_by_name,
+                   SubscriptionType, TimeStamp, _channel_type_by_name,
                    _LongStringChannelType, native_type, native_types,
-                   time_types, timestamp_to_epics)
+                   time_types)
 from ._utils import (CaprotoError, CaprotoValueError, ConversionDirection,
                      is_array_read_only)
 
@@ -240,8 +240,10 @@ class ChannelData:
     ----------
     value :
         Data which has to match with this class's ``data_type``.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp associated with the value. Defaults to ``time.time()``.
+        Raw EPICS timestamps are also supported in the form of
+        ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -281,8 +283,13 @@ class ChannelData:
             # minimum length here is required to be at least 1.
 
         value = self.preprocess_value(value)
-        self._data = dict(value=value,
-                          timestamp=timestamp)
+
+        # The following _data isn't meant to be modified directly. It should be
+        # modified by way of the ``write()`` and ``write_metadata`` methods.
+        self._data = dict(
+            value=value,
+            timestamp=TimeStamp.from_flexible_value(timestamp),
+        )
         # This is a dict keyed on queues that will receive subscription
         # updates.  (Each queue belongs to a Context.) Each value is itself a
         # dict, mapping data_types to the set of SubscriptionSpecs that request
@@ -354,16 +361,17 @@ class ChannelData:
 
     def __getnewargs_ex__(self):
         # ref: https://docs.python.org/3/library/pickle.html
-        kwargs = {'timestamp': self.timestamp,
-                  'alarm': self.alarm,
-                  'string_encoding': self.string_encoding,
-                  'reported_record_type': self.reported_record_type,
-                  'data': self._data,
-                  'max_length': self._max_length}
+        kwargs = {
+            'timestamp': self.epics_timestamp,
+            'alarm': self.alarm,
+            'string_encoding': self.string_encoding,
+            'reported_record_type': self.reported_record_type,
+            'data': self._data,
+            'max_length': self._max_length
+        }
         return ((), kwargs)
 
     value = _read_only_property('value')
-    timestamp = _read_only_property('timestamp')
 
     # "before" — only the last value received before the state changes from
     #     false to true is forwarded to the client.
@@ -638,6 +646,10 @@ class ChannelData:
         """
         Write data from native Python types.
 
+        Metadata may be updated at the same time by way of keyword arguments.
+        Refer to the parameters section below for the keywords or the method
+        ``write_metadata``.
+
         Parameters
         ----------
         value :
@@ -648,6 +660,34 @@ class ChannelData:
             Run the ``verify_value`` hook prior to updating internal state.
         update_fields : bool, optional
             Run the ``update_fields`` hook prior to updating internal state.
+        units : str, optional
+            [Metadata] Updated units.
+        precision : int, optional
+            [Metadata] Updated precision value.
+        timestamp : float, TimeStamp, or 2-tuple, optional
+            [Metadata] Updated timestamp. Supported options include
+            ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the
+            form of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
+        upper_disp_limit : int or float, optional
+            [Metadata] Updated upper display limit.
+        lower_disp_limit : int or float, optional
+            [Metadata] Updated lower display limit.
+        upper_alarm_limit : int or float, optional
+            [Metadata] Updated upper alarm limit.
+        upper_warning_limit : int or float, optional
+            [Metadata] Updated upper warning limit.
+        lower_warning_limit : int or float, optional
+            [Metadata] Updated lower warning limit.
+        lower_alarm_limit : int or float, optional
+            [Metadata] Updated lower alarm limit.
+        upper_ctrl_limit : int or float, optional
+            [Metadata] Updated upper control limit.
+        lower_ctrl_limit : int or float, optional
+            [Metadata] Updated lower control limit.
+        status : AlarmStatus, optional
+            [Metadata] Updated alarm status.
+        severity : AlarmSeverity, optional
+            [Metadata] Updated alarm severity.
 
         Raises
         ------
@@ -786,9 +826,7 @@ class ChannelData:
             dbr_metadata.precision = data.get('precision', 0)
 
         if to_type in time_types:
-            epics_ts = timestamp_to_epics(data['timestamp'])
-            stamp = dbr_metadata.stamp
-            stamp.secondsSinceEpoch, stamp.nanoSeconds = epics_ts
+            dbr_metadata.stamp = self.epics_timestamp
 
         convert_attrs = (GraphicControlBase.control_fields +
                          GraphicControlBase.graphic_fields)
@@ -829,8 +867,10 @@ class ChannelData:
             Updated units.
         precision : int, optional
             Updated precision value.
-        timestamp : float, optional
-            Updated timestamp.
+        timestamp : float, TimeStamp, or 2-tuple, optional
+            Updated timestamp. Supported options include ``time.time()``-style
+            UNIX timestamps, raw EPICS timestamps in the form of ``TimeStamp``
+            or ``(seconds_since_epoch, nanoseconds)``.
         upper_disp_limit : int or float, optional
             Updated upper display limit.
         lower_disp_limit : int or float, optional
@@ -853,7 +893,7 @@ class ChannelData:
             Updated alarm severity.
         """
         data = self._data
-        for kw in ('units', 'precision', 'timestamp', 'upper_disp_limit',
+        for kw in ('units', 'precision', 'upper_disp_limit',
                    'lower_disp_limit', 'upper_alarm_limit',
                    'upper_warning_limit', 'lower_warning_limit',
                    'lower_alarm_limit', 'upper_ctrl_limit',
@@ -869,8 +909,10 @@ class ChannelData:
                     pass
                 data[kw] = value
 
-        if any(alarm_val is not None
-               for alarm_val in (status, severity)):
+        if timestamp is not None:
+            self._data["timestamp"] = TimeStamp.from_flexible_value(timestamp)
+
+        if status is not None or severity is not None:
             await self.alarm.write(status=status, severity=severity,
                                    publish=publish)
 
@@ -878,9 +920,14 @@ class ChannelData:
             await self.publish(SubscriptionType.DBE_PROPERTY)
 
     @property
-    def epics_timestamp(self):
-        'EPICS timestamp as (seconds, nanoseconds) since EPICS epoch'
-        return timestamp_to_epics(self._data['timestamp'])
+    def timestamp(self) -> float:
+        """UNIX timestamp in seconds."""
+        return self._data["timestamp"].timestamp
+
+    @property
+    def epics_timestamp(self) -> TimeStamp:
+        """EPICS timestamp as (seconds, nanoseconds) since EPICS epoch."""
+        return copy.copy(self._data["timestamp"])
 
     @property
     def status(self):
@@ -989,8 +1036,10 @@ class ChannelEnum(ChannelData):
         The string value in the enum, or an integer index of that list.
     enum_strings : list, tuple, optional
         Enum strings to be used for the data.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -1079,8 +1128,10 @@ class ChannelNumeric(ChannelData):
     ----------
     value :
         Data which has to match with this class's ``data_type``.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -1254,8 +1305,10 @@ class ChannelShort(ChannelNumeric):
     ----------
     value : int or list of int
         Default starting value.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -1302,8 +1355,10 @@ class ChannelInteger(ChannelNumeric):
     ----------
     value : int or list of int
         Default starting value.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -1350,8 +1405,10 @@ class ChannelFloat(ChannelNumeric):
     ----------
     value : float or list of float
         Initial value for the data.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -1410,8 +1467,10 @@ class ChannelDouble(ChannelNumeric):
     ----------
     value : float or list of float
         Initial value for the data.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -1470,8 +1529,10 @@ class ChannelByte(ChannelNumeric):
     ----------
     value : int or bytes
         Initial starting data.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -1567,8 +1628,10 @@ class ChannelChar(ChannelData):
         Initial starting data.
     string_encoding : str, optional
         The string encoding to use, defaults to 'latin-1'.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional
@@ -1661,8 +1724,10 @@ class ChannelString(ChannelData):
     long_string_max_length : str, optional
         When requested as a long string (DBR_CHAR over Channel Access), this
         is the reported maximum length.
-    timestamp : float, optional
-        Posix timestamp associated with the value. Defaults to ``time.time()``.
+    timestamp : float, TimeStamp, or 2-tuple, optional
+        Timestamp to report for the current value. Supported options include
+        ``time.time()``-style UNIX timestamps, raw EPICS timestamps in the form
+        of ``TimeStamp`` or ``(seconds_since_epoch, nanoseconds)``.
     max_length : int, optional
         Maximum array length of the data.
     string_encoding : str, optional

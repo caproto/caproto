@@ -5,14 +5,16 @@
 # The organizational code, making use of Enum, comes from pypvasync by Kenneth
 # Lauer.
 
+import collections
 import ctypes
 import datetime
-import collections
 import logging
+import numbers
+import time
 from enum import IntEnum, IntFlag
-from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
-                         MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
 
+from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_ENUM_STATES,
+                         MAX_ENUM_STRING_SIZE, MAX_STRING_SIZE, MAX_UNITS_SIZE)
 
 __all__ = ('AccessRights', 'AlarmSeverity', 'AlarmStatus', 'ConnStatus',
            'TimeStamp', 'ChannelType', 'SubscriptionType', 'DbrStringArray',
@@ -275,18 +277,52 @@ class TimeStamp(DbrTypeBase):
 
     @property
     def timestamp(self):
-        'Timestamp as UNIX timestamp (seconds)'
+        """Timestamp as a UNIX timestamp (seconds)."""
         return epics_timestamp_to_unix(self.secondsSinceEpoch,
                                        self.nanoSeconds)
 
     @classmethod
     def from_unix_timestamp(cls, timestamp):
+        """Create a ``TimeStamp`` from a UNIX timestamp."""
         sec, nano = timestamp_to_epics(timestamp)
+        return cls(secondsSinceEpoch=sec, nanoSeconds=nano)
+
+    @classmethod
+    def now(cls):
+        """Get a new ``TimeStamp`` representing 'now' (``time.time()``)"""
+        return cls.from_unix_timestamp(time.time())
+
+    @classmethod
+    def from_flexible_value(cls, timestamp):
+        """
+        Flexible TimeStamp conversion.
+
+        Parameters
+        ----------
+        timestamp : float, int, TimeStamp, or 2-tuple
+            Accepts either a number (UNIX timestamp), a TimeStamp instance, or
+            a tuple of (seconds, nanoseconds).
+
+        Returns
+        -------
+        TimeStamp
+            The EPICS-compatible timestamp.
+        """
+        if isinstance(timestamp, numbers.Real):
+            sec, nano = timestamp_to_epics(timestamp)
+        else:
+            sec, nano = tuple(timestamp)
         return cls(secondsSinceEpoch=sec, nanoSeconds=nano)
 
     def as_datetime(self):
         'Timestamp as a datetime'
-        return datetime.datetime.utcfromtimestamp(self.timestamp)
+        return datetime.datetime.fromtimestamp(self.timestamp)
+
+    def __iter__(self):
+        return iter((self.secondsSinceEpoch, self.nanoSeconds))
+
+    def __eq__(self, other):
+        return tuple(self) == tuple(other)
 
 
 class TimeTypeBase(DbrTypeBase):
@@ -1115,7 +1151,7 @@ def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
 
 def timestamp_to_epics(ts):
     '''Python timestamp from EPICS TimeStamp structure'''
-    if isinstance(ts, float):
+    if isinstance(ts, numbers.Real):
         ts = datetime.datetime.utcfromtimestamp(ts)
     dt = ts - EPICS_EPOCH
     return int(dt.total_seconds()), int(dt.microseconds * 1e3)
