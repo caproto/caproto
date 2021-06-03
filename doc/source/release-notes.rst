@@ -2,7 +2,7 @@
 Release History
 ***************
 
-v0.8.1 (2021-03-??)
+v0.8.1 (2021-06-03)
 ===================
 
 Fixed
@@ -10,6 +10,16 @@ Fixed
 
 - pyepics compatibility layer should no longer leak a byte string ``value``
   through for DBR_STRING ``PV`` instances.  (#710, #763)
+
+Added
+-----
+
+- Added support for raw EPICS timestamps in ``ChannelData`` instances, allowing
+  for lossless representation and transmission of facility-specific beam
+  fiducials, pulse IDs, and such.  This feature is not intended to replace the
+  current usage of POSIX (``time.time()``) timestamps, but rather extend what
+  is considered to be acceptable input.
+
 
 v0.8.0 (2021-03-18)
 ===================
