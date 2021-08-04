@@ -124,8 +124,7 @@ formally committed resources to its continued support. If a facility makes a
 What about pvAccess?
 ====================
 
-Caproto offers *very* preliminary pvAccess support.  See more in the
-:doc:`pva/index` section.
+Caproto offered preliminary pvAccess support, but it has since been removed.
 
 Vital Statistics
 ================
@@ -178,15 +177,6 @@ learning exercises.
 
    basics
    api
-
-.. toctree::
-   :maxdepth: 4
-   :caption: pvAccess
-
-   pva/index
-   pva/clients
-   pva/iocs
-   pva/api
 
 .. toctree::
    :maxdepth: 2
