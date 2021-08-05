@@ -16,4 +16,3 @@ pytest_bench.json
 build/
 dist/
 /doc/source/generated
-/doc/source/pva/generated

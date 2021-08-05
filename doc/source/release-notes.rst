@@ -2,6 +2,18 @@
 Release History
 ***************
 
+v0.8.2 (2021-??-??)
+===================
+
+Changed
+-------
+
+- pvAccess support has been removed.
+- Top-level utility functions for accessing pvAccess environment variables
+  are now deprecated and will be reverted to pre-pvAccess (no protocol argument
+  allowed) signatures in a future release.
+
+
 v0.8.1 (2021-06-03)
 ===================
 
