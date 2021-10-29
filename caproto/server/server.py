@@ -1048,7 +1048,7 @@ class pvproperty:
         if get.__doc__:
             if self.__doc__ is None:
                 self.__doc__ = get.__doc__
-            if 'doc' not in self.spec_kw:
+            if 'doc' not in spec_kw:
                 spec_kw['doc'] = get.__doc__
 
         self.pvspec = PVSpec(get, put, startup, shutdown, **spec_kw)
