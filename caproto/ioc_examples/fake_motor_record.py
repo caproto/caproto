@@ -27,7 +27,7 @@ async def motor_record_simulator(instance, async_lib, defaults=None,
     async_lib : AsyncLibraryLayer
 
     defaults : dict, optional
-        Defaults for velocity, precision, acceleration, and resolution.
+        Defaults for velocity, precision, acceleration, limits, and resolution.
 
     tick_rate_hz : float, optional
         Update rate in Hz.
@@ -39,6 +39,7 @@ async def motor_record_simulator(instance, async_lib, defaults=None,
             acceleration=1.0,
             resolution=1e-6,
             tick_rate_hz=10.,
+            user_limits=(0.0, 100.0),
         )
 
     fields = instance.field_inst  # type: MotorFields
@@ -58,6 +59,8 @@ async def motor_record_simulator(instance, async_lib, defaults=None,
     await fields.velocity.write(defaults['velocity'])
     await fields.seconds_to_velocity.write(defaults['acceleration'])
     await fields.motor_step_size.write(defaults['resolution'])
+    await fields.user_low_limit.write(defaults['user_limits'][0])
+    await fields.user_high_limit.write(defaults['user_limits'][1])
 
     while True:
         dwell = 1. / tick_rate_hz
@@ -117,6 +120,7 @@ class FakeMotor(PVGroup):
                  precision=3,
                  acceleration=1.0,
                  resolution=1e-6,
+                 user_limits=(0.0, 100.0),
                  tick_rate_hz=10.,
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -127,6 +131,7 @@ class FakeMotor(PVGroup):
             'precision': precision,
             'acceleration': acceleration,
             'resolution': resolution,
+            'user_limits': user_limits,
         }
 
     @motor.startup
@@ -149,9 +154,9 @@ class FakeMotorIOC(PVGroup):
     mtr3 (motor)
     """
 
-    motor1 = SubGroup(FakeMotor, velocity=1., precision=3, prefix='mtr1')
-    motor2 = SubGroup(FakeMotor, velocity=2., precision=2, prefix='mtr2')
-    motor3 = SubGroup(FakeMotor, velocity=3., precision=2, prefix='mtr3')
+    motor1 = SubGroup(FakeMotor, velocity=1., precision=3, user_limits=(0, 10), prefix='mtr1')
+    motor2 = SubGroup(FakeMotor, velocity=2., precision=2, user_limits=(-10, 20), prefix='mtr2')
+    motor3 = SubGroup(FakeMotor, velocity=3., precision=2, user_limits=(0, 30), prefix='mtr3')
 
 
 if __name__ == '__main__':
