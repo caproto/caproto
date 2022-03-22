@@ -542,7 +542,7 @@ class PVSpec(namedtuple('PVSpec',
         """
         if group is None:
             type_map = pvspec_type_map
-            type_map_read_only = pvspec_type_map
+            type_map_read_only = pvspec_type_map_read_only
         else:
             type_map = group.type_map
             type_map_read_only = group.type_map_read_only
