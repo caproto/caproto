@@ -4,7 +4,7 @@ jobs:
 
 - job: 'Test'
   pool:
-    vmImage: 'Ubuntu 16.04'
+    vmImage: 'ubuntu-18.04'
   strategy:
     matrix:
       Python 3.7:
