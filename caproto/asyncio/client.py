@@ -993,11 +993,6 @@ class VirtualCircuitManager:
         self.transport = _TransportWrapper(reader, writer)
         self._tasks.create(self._transport_receive_loop(self.transport))
 
-        # this is done by default from 3.6+
-        self.transport.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        # This is required because of `sock_sendall`
-        self.transport.sock.setblocking(False)
-
         self.circuit.our_address = self.transport.getsockname()
 
         # This dict is passed to the loggers.
