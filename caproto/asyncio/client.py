@@ -938,7 +938,6 @@ class VirtualCircuitManager:
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.transport = None
         self._ioid_counter = ThreadsafeCounter()
-        self._raw_lock = asyncio.Lock()
         self._ready = asyncio.Event()
         self._send_on_connection = []
         self._subscriptionid_counter = ThreadsafeCounter()
@@ -1071,18 +1070,9 @@ class VirtualCircuitManager:
         # Turn the crank: inform the VirtualCircuit that these commands will be
         # send, and convert them to buffers.
         buffers_to_send = self.circuit.send(*commands, extra=extra)
-
-        # lock to make sure a AddEvent does not write bytes to the socket while
-        # we are sending
-        async def _socket_send(buffers_to_send):
-            'Send a list of buffers over the socket'
-            try:
-                return self.transport.sock.sendmsg(buffers_to_send)
-            except BlockingIOError:
-                raise ca.SendAllRetry()
-
-        async with self._raw_lock:
-            await ca.async_send_all(buffers_to_send, _socket_send)
+        # TODO: can we trust asyncio to get this all out the door 😱
+        # and not use our blocking wrapper?
+        await self.transport.send(b''.join(buffers_to_send))
 
     async def events_off(self):
         """

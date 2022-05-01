@@ -67,22 +67,20 @@ class _TransportWrapper:
 
     Parameters
     ----------
-    sock : socket.socket
-        The socket.
+    reader : ??
+
+    writer : ??
 
     loop : asyncio.AbstractEventLoop, optional
         The event loop.
     """
 
-    sock: socket.socket
     loop: asyncio.AbstractEventLoop
     transport: asyncio.BaseTransport
 
     def __init__(self, reader, writer, loop=None):
         self.reader = reader
         self.writer = writer
-        self.loop = loop or get_running_loop()
-        self.sock = self.writer.get_extra_info('socket')
         self.lock = asyncio.Lock()
 
     def getsockname(self):
