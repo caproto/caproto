@@ -395,7 +395,7 @@ class SharedBroadcaster:
 
         try:
             self.udp_sock.sendto(bytes_to_send, addr)
-        except OSError as ex:
+        except (OSError, AttributeError) as ex:
             host, specified_port = addr
             self.log.exception('%s while sending %d bytes to %s:%d',
                                ex, len(bytes_to_send), host, specified_port)
@@ -453,8 +453,11 @@ class SharedBroadcaster:
             self.broadcaster.log.debug(
                 '%d commands %dB',
                 len(commands), len(bytes_to_send), extra=tags)
+            sock = self.udp_sock
+            if sock is None:
+                return
             try:
-                self.udp_sock.sendto(bytes_to_send, host_tuple)
+                sock.sendto(bytes_to_send, host_tuple)
             except OSError as ex:
                 host, specified_port = host_tuple
                 raise CaprotoNetworkError(
