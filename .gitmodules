@@ -1,3 +1,3 @@
 [submodule "caproto/tests/reference-dbd"]
 	path = caproto/tests/reference-dbd
-	url = git://github.com/caproto/reference-dbd.git
+	url = https://github.com/caproto/reference-dbd.git
