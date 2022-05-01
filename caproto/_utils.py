@@ -337,7 +337,7 @@ def get_manually_specified_client_addresses(
         *, protocol=Protocol.ChannelAccess):
     '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
     return _split_address_list(
-        get_environment_variables()[f'EPICS_{protocol}_ADDR_LIST'])
+        get_environment_variables()[f'EPICS_{protocol.value}_ADDR_LIST'])
 
 
 def get_address_list(*, protocol=Protocol.ChannelAccess):
@@ -351,7 +351,7 @@ def get_address_list(*, protocol=Protocol.ChannelAccess):
 
     env = get_environment_variables()
     addresses = get_manually_specified_client_addresses(protocol=protocol)
-    auto_addr_list = env[f'EPICS_{protocol}_AUTO_ADDR_LIST']
+    auto_addr_list = env[f'EPICS_{protocol.value}_AUTO_ADDR_LIST']
 
     if addresses and auto_addr_list.lower() != 'yes':
         # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
