@@ -250,8 +250,8 @@ def test_client_addresses(monkeypatch, protocol, default_port, env_auto,
     # Easier to test without netifaces
     monkeypatch.setattr(ca._utils, 'netifaces', None)
 
-    env[f'EPICS_{protocol}_ADDR_LIST'] = env_addr
-    env[f'EPICS_{protocol}_AUTO_ADDR_LIST'] = env_auto
+    env[f'EPICS_{protocol.value}_ADDR_LIST'] = env_addr
+    env[f'EPICS_{protocol.value}_AUTO_ADDR_LIST'] = env_auto
     if protocol == 'CA':
         env['EPICS_CA_SERVER_PORT'] = int(default_port)
     elif protocol == 'PVA':
