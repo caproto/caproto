@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import sys
+import warnings
 
 import caproto as ca
 
@@ -41,19 +42,16 @@ class VirtualCircuit(_VirtualCircuit):
     TaskCancelled = asyncio.CancelledError
 
     def __init__(self, circuit, client, context, *, loop=None):
-        if loop is None:
-            loop = asyncio.get_event_loop()
-        self.loop = loop
+        if loop is not None:
+            warnings.warn("The loop kwarg will be removed in the future", stacklevel=2)
 
         super().__init__(circuit, client, context)
         self.QueueFull = asyncio.QueueFull
-        self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
-                                           loop=self.loop)
-        self.new_command_condition = asyncio.Condition(loop=self.loop)
-        self.events_on = asyncio.Event(loop=self.loop)
-        self.subscription_queue = asyncio.Queue(
-            ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG, loop=self.loop)
-        self.write_event = Event(loop=self.loop)
+        self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG)
+        self.new_command_condition = asyncio.Condition()
+        self.events_on = asyncio.Event()
+        self.subscription_queue = asyncio.Queue(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.write_event = Event()
         self.tasks = _TaskHandler()
         self._sub_task = None
 
@@ -62,7 +60,7 @@ class VirtualCircuit(_VirtualCircuit):
         # so we do this little stub in its own method.
         fut = asyncio.ensure_future(self.subscription_queue.get())
         try:
-            return await asyncio.wait_for(fut, timeout, loop=self.loop)
+            return await asyncio.wait_for(fut, timeout)
         except asyncio.TimeoutError:
             return None
 
@@ -102,6 +100,9 @@ class Context(_Context):
     TaskCancelled = asyncio.CancelledError
 
     def __init__(self, pvdb, interfaces=None, *, loop=None):
+        if loop is not None:
+            warnings.warn("The loop kwarg will be removed in the future", stacklevel=2)
+
         super().__init__(pvdb, interfaces)
         self.broadcaster_datagram_queue = AsyncioQueue(
             ca.MAX_COMMAND_BACKLOG
@@ -110,9 +111,7 @@ class Context(_Context):
             ca.MAX_COMMAND_BACKLOG
         )
         self.subscription_queue = asyncio.Queue()
-        if loop is None:
-            loop = asyncio.get_event_loop()
-        self.loop = loop
+
         self.async_layer = AsyncioAsyncLayer()
         self.server_tasks = _TaskHandler()
         self.tcp_sockets = dict()
@@ -156,7 +155,7 @@ class Context(_Context):
                 continue
 
             wrapped_transport = _UdpTransportWrapper(
-                sock, address, loop=self.loop
+                sock, address
             )
             self.beacon_socks[address] = (interface,   # TODO; this is incorrect
                                           wrapped_transport)
@@ -200,7 +199,7 @@ class Context(_Context):
             async_lib = AsyncioAsyncLayer()
             for name, method in self.shutdown_methods.items():
                 self.log.debug('Calling shutdown method %r', name)
-                task = self.loop.create_task(method(async_lib))
+                task = asyncio.get_running_loop().create_task(method(async_lib))
                 shutdown_tasks.append(task)
             await asyncio.gather(*shutdown_tasks)
             for sock in self.tcp_sockets.values():
@@ -223,15 +222,13 @@ class Context(_Context):
 
         sock = _create_udp_socket()
         sock.bind((interface, self.ca_server_port))
-        transport, _ = await self.loop.create_datagram_endpoint(
+        transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(
             functools.partial(_DatagramProtocol, parent=self,
                               identifier=interface,
                               queue=self.broadcaster_datagram_queue),
             sock=sock,
         )
-        self.udp_socks[interface] = _UdpTransportWrapper(
-            transport, loop=self.loop
-        )
+        self.udp_socks[interface] = _UdpTransportWrapper(transport)
         self.log.debug('UDP socket bound on %s:%d', interface,
                        self.ca_server_port)
 
