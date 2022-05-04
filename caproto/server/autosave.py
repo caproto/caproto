@@ -214,6 +214,7 @@ class AutosaveHelper(PVGroup):
         if file_manager is None:
             file_manager = RotatingFileManager(self.filename)
         self.file_manager = file_manager
+        self.filename = self.file_manager.filename
 
     @autosave_hook.startup
     async def autosave_hook(self, instance, async_lib):
