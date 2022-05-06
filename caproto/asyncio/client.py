@@ -1067,7 +1067,10 @@ class VirtualCircuitManager:
         buffers_to_send = self.circuit.send(*commands, extra=extra)
         # TODO: can we trust asyncio to get this all out the door 😱
         # and not use our blocking wrapper?
-        await self.transport.send(b''.join(buffers_to_send))
+        for buff in buffers_to_send:
+            self.transport.writer.write(buff)
+
+        await self.transport.writer.drain()
 
     async def events_off(self):
         """
