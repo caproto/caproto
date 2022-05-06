@@ -1068,8 +1068,7 @@ class VirtualCircuitManager:
         # TODO: can we trust asyncio to get this all out the door 😱
         # and not use our blocking wrapper?
         for buff in buffers_to_send:
-            if len(buff) > 0:
-                self.transport.writer.write(buff)
+            self.transport.writer.write(buff.tobytes())
 
         await self.transport.writer.drain()
 
