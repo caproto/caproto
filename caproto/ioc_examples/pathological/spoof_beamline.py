@@ -72,6 +72,10 @@ def fabricate_channel(key):
     elif ('file' in key.lower() and 'number' not in key.lower() and
           'mode' not in key.lower()):
         return ChannelChar(value='a' * 250)
+    elif ('filenumber' in key.lower()):
+        return ChannelInteger(value=0)
+    elif 'Compression' in key:
+        return ChannelEnum(value=0, enum_strings=['None', 'N-bit', 'szip', 'zlib', 'blosc'])
     return ChannelDouble(value=0.0)
 
 
