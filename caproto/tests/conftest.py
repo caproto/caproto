@@ -190,6 +190,11 @@ ioc_example_to_info = {
         kwargs={},
         marks=[],
     ),
+    "caproto.ioc_examples.simple_with_type_hints": dict(
+        group_cls="SimpleIOC",
+        kwargs={},
+        marks=[],
+    ),
     "caproto.ioc_examples.startup_and_shutdown_hooks": dict(
         group_cls='StartupAndShutdown',
         kwargs={},

@@ -6,6 +6,8 @@ a single asyncio library.
 
 For an example server implementation, see caproto.curio.server
 """
+from __future__ import annotations
+
 import argparse
 import copy
 import enum
@@ -14,9 +16,11 @@ import inspect
 import logging
 import sys
 import time
+import typing
 from collections import OrderedDict, defaultdict, namedtuple
 from types import MethodType
-from typing import Optional
+from typing import (Any, Callable, Dict, Generic, Optional, Protocol, Tuple,
+                    Type, TypeVar, Union)
 
 from caproto._log import _set_handler_with_logger, set_handler
 
@@ -50,6 +54,46 @@ __all__ = ['AsyncLibraryLayer',
 
            'ioc_arg_parser', 'template_arg_parser', 'run',
            ]
+
+
+T_Data = TypeVar("T_Data", bound="PvpropertyData")
+T_PVGroup = TypeVar("T_PVGroup", bound="PVGroup")
+T_pvproperty = TypeVar("T_pvproperty", bound="pvproperty")
+T_contra = TypeVar("T_contra", contravariant=True)
+T_SubGroup = TypeVar("T_SubGroup", bound="SubGroup")
+
+
+class Getter(Protocol[T_contra]):
+    async def __call__(_self, self: PVGroup, instance: T_contra) -> Optional[Any]:
+        ...
+
+
+class Putter(Protocol[T_contra]):
+    async def __call__(
+        _self, self: PVGroup, instance: T_contra, value: Any
+    ) -> Optional[Any]:
+        ...
+
+
+class Startup(Protocol[T_contra]):
+    async def __call__(
+        _self, self: PVGroup, instance: T_contra, async_lib: AsyncLibraryLayer
+    ) -> None:
+        ...
+
+
+class Scan(Protocol[T_contra]):
+    async def __call__(
+        _self, self: PVGroup, instance: T_contra, async_lib: AsyncLibraryLayer
+    ) -> None:
+        ...
+
+
+class Shutdown(Protocol[T_contra]):
+    async def __call__(
+        _self, self: PVGroup, instance: T_contra, async_lib: AsyncLibraryLayer
+    ) -> None:
+        ...
 
 
 def _enum_instance_to_enum_strings(enum_class):
@@ -485,7 +529,7 @@ class PVSpec(namedtuple('PVSpec',
         The attribute name
     name : str, optional
         The PV name
-    dtype : ChannelType or builtin type, optional
+    dtype : ChannelType, builtin type, or ChannelData subclass, optional
         The data type
     value : any, optional
         The initial value
@@ -510,16 +554,47 @@ class PVSpec(namedtuple('PVSpec',
     __slots__ = ()
     default_dtype = int
 
-    def __new__(cls, get=None, put=None, startup=None, shutdown=None,
-                attr=None, name=None, dtype=None, value=None, max_length=None,
-                alarm_group=None, read_only=None, doc=None, fields=None,
-                scan=None, record=None, cls_kwargs=None):
+    get: Optional[Getter]
+    put: Optional[Putter]
+    startup: Optional[Startup]
+    shutdown: Optional[Shutdown]
+    attr: Optional[str]
+    name: Optional[str]
+    dtype: Optional[Any]
+    value: Optional[Any]
+    max_length: Optional[int]
+    alarm_group: Optional[str]
+    read_only: Optional[bool]
+    doc: Optional[str]
+    scan: Scan
+    record: Optional[str]
+    cls_kwargs: Dict[str, Any]
+
+    def __new__(
+        cls,
+        get: Optional[Getter] = None,
+        put: Optional[Putter] = None,
+        startup: Optional[Startup] = None,
+        shutdown: Optional[Shutdown] = None,
+        attr: Optional[str] = None,
+        name: Optional[str] = None,
+        dtype: Optional[Any] = None,
+        value: Optional[Any] = None,
+        max_length: Optional[int] = None,
+        alarm_group: Optional[str] = None,
+        read_only: Optional[bool] = None,
+        doc: Optional[str] = None,
+        fields=None,
+        scan=None,
+        record: Optional[str] = None,
+        cls_kwargs=None,
+    ):
         if dtype is None:
             if value is None:
                 dtype = cls.default_dtype
             elif isinstance(value, (list, tuple) + backend.array_types):
                 dtype = type(value[0])
-            else:
+            elif value is not None:
                 dtype = type(value)
 
         if put is not None:
@@ -530,13 +605,25 @@ class PVSpec(namedtuple('PVSpec',
                 f'Cannot specify `record` on PV with a "." in it: {name!r}'
             )
 
-        return super().__new__(cls, get=get, put=put, startup=startup,
-                               shutdown=shutdown, attr=attr, name=name,
-                               dtype=dtype, value=value, max_length=max_length,
-                               alarm_group=alarm_group, read_only=read_only,
-                               doc=doc, fields=fields, scan=scan,
-                               record=record,
-                               cls_kwargs=cls_kwargs)
+        return super().__new__(
+            cls,
+            get=get,
+            put=put,
+            startup=startup,
+            shutdown=shutdown,
+            attr=attr,
+            name=name,
+            dtype=dtype,
+            value=value,
+            max_length=max_length,
+            alarm_group=alarm_group,
+            read_only=read_only,
+            doc=doc,
+            fields=fields,
+            scan=scan,
+            record=record,
+            cls_kwargs=cls_kwargs,
+        )
 
     def new_names(self, attr=None, name=None):
         if attr is None:
@@ -564,8 +651,11 @@ class PVSpec(namedtuple('PVSpec',
         dtype = self.dtype
 
         # A special case for integer enums:
-        if inspect.isclass(dtype) and issubclass(dtype, enum.IntEnum):
-            dtype = enum.IntEnum
+        if inspect.isclass(dtype):
+            if issubclass(dtype, enum.IntEnum):
+                dtype = enum.IntEnum
+            elif issubclass(dtype, ChannelData):
+                return dtype
 
         if self.read_only:
             return type_map_read_only[dtype]
@@ -602,16 +692,23 @@ class PVSpec(namedtuple('PVSpec',
             alarm = group.alarms[self.alarm_group]
             full_pvname = group.prefix + expand_macros(self.name, group.macros)
 
-        cls = self.get_data_class(group)
+        cls: Type[ChannelData] = self.get_data_class(group)
 
         if alarm and not isinstance(alarm, ChannelAlarm):
             raise ValueError(f"Alarm instance required for {full_pvname!r}")
 
-        value = (
-            self.value
-            if self.value is not None
-            else group.default_values[self.dtype]
-        )
+        if group is not None:
+            value = (
+                self.value
+                if self.value is not None
+                else group.default_values.get(self.dtype, cls.default_value)
+            )
+        else:
+            value = (
+                self.value
+                if self.value is not None
+                else cls.default_value
+            )
 
         return cls, dict(
             group=group,
@@ -811,7 +908,7 @@ class FieldSpec:
                 f'fields={self.fields}>')
 
 
-class pvproperty:
+class pvproperty(Generic[T_Data]):
     """
     A property-like descriptor for specifying a PV in a `PVGroup`.
 
@@ -874,10 +971,26 @@ class pvproperty:
         The field specification information helper.
     """
 
-    def __init__(self, get=None, put=None, startup=None, shutdown=None, *,
-                 scan=None, name=None, dtype=None, value=None, max_length=None,
-                 alarm_group=None, doc=None, read_only=None, field_spec=None,
-                 fields=None, record=None, **cls_kwargs):
+    def __init__(
+        self,
+        get: Optional[Getter] = None,
+        put: Optional[Putter] = None,
+        startup: Optional[Startup] = None,
+        shutdown: Optional[Shutdown] = None,
+        *,
+        scan=None,
+        name: Optional[str] = None,
+        dtype: Optional[Type[T_Data]] = None,
+        value: Optional[Any] = None,
+        max_length: Optional[int] = None,
+        alarm_group: Optional[str] = None,
+        doc: Optional[str] = None,
+        read_only: Optional[bool] = None,
+        field_spec=None,
+        fields=None,
+        record: Optional[str] = None,
+        **cls_kwargs
+    ):
         self.attr_name = None  # to be set later
 
         if doc is None and get is not None:
@@ -918,6 +1031,18 @@ class pvproperty:
         )
         self.__doc__ = doc
 
+    def _get_class_from_annotation(self) -> Optional[Type[T_Data]]:
+        """Get a class from a ``pvproperty[cls]`` annotation."""
+        annotation = getattr(self, "__orig_class__", None)
+        print(self, "annotation is", annotation)
+        if not annotation:
+            return None
+
+        args = typing.get_args(annotation)
+        if not args or not len(args) == 1:
+            return None
+        return args[0]
+
     @property
     def record_type(self):
         """The configured record type to report. [Backward-compatibility]"""
@@ -938,7 +1063,19 @@ class pvproperty:
             copied.field_spec.prop = copied
         return copied
 
-    def __get__(self, instance, owner):
+    @typing.overload
+    def __get__(self: T_pvproperty, instance: None, owner: Any) -> T_pvproperty:
+        ...
+
+    @typing.overload
+    def __get__(self, instance: PVGroup, owner: Type[PVGroup]) -> T_Data:
+        ...
+
+    def __get__(
+        self: T_pvproperty,
+        instance: Optional[PVGroup],
+        owner: Optional[Any],
+    ) -> Union[T_Data, T_pvproperty]:
         """Descriptor method: get the pvproperty instance from a group."""
         if instance is None:
             # `class.pvproperty`
@@ -954,9 +1091,18 @@ class pvproperty:
         """Descriptor method: delete the pvproperty instance from a group."""
         del instance.attr_pvdb[self.attr_name]
 
-    def __set_name__(self, owner, name):
+    def __set_name__(self, owner: Type[PVGroup], name: str):
         """Descriptor method: auto-called to set the attribute name."""
         self.attr_name = name
+
+        # Use the type parameter T_Data to specify the type, if available
+        if self.pvspec.dtype is None:
+            dtype = self._get_class_from_annotation()
+            if dtype is not None:
+                self.pvspec = self.pvspec._replace(
+                    dtype=dtype
+                )
+
         # update the PV specification with the attribute name
         self.pvspec = self.pvspec.new_names(
             self.attr_name,
@@ -964,7 +1110,7 @@ class pvproperty:
             if self.pvspec.name is not None
             else self.attr_name)
 
-    def getter(self, get):
+    def getter(self: T_pvproperty, get: Getter) -> T_pvproperty:
         """
         Usually used as a decorator, this sets the ``getter`` in the PVSpec.
         """
@@ -972,7 +1118,7 @@ class pvproperty:
         self.pvspec = self.pvspec._replace(get=get)
         return self
 
-    def putter(self, put):
+    def putter(self: T_pvproperty, put: Putter) -> T_pvproperty:
         """
         Usually used as a decorator, this sets the ``putter`` in the PVSpec.
         """
@@ -980,7 +1126,7 @@ class pvproperty:
         self.pvspec = self.pvspec._replace(put=put)
         return self
 
-    def startup(self, startup):
+    def startup(self: T_pvproperty, startup: Startup) -> T_pvproperty:
         """
         Usually used as a decorator, this sets ``startup`` in the PVSpec.
         """
@@ -988,7 +1134,7 @@ class pvproperty:
         self.pvspec = self.pvspec._replace(startup=startup)
         return self
 
-    def shutdown(self, shutdown):
+    def shutdown(self: T_pvproperty, shutdown: Shutdown) -> T_pvproperty:
         """
         Usually used as a decorator, this sets ``shutdown`` in the PVSpec.
         """
@@ -996,8 +1142,15 @@ class pvproperty:
         self.pvspec = self.pvspec._replace(shutdown=shutdown)
         return self
 
-    def scan(self, period, *, subtract_elapsed=True, stop_on_error=False,
-             failure_severity=AlarmSeverity.MAJOR_ALARM, use_scan_field=False):
+    def scan(
+        self: T_pvproperty,
+        period: float,
+        *,
+        subtract_elapsed: bool = True,
+        stop_on_error: bool = False,
+        failure_severity: AlarmSeverity = AlarmSeverity.MAJOR_ALARM,
+        use_scan_field: bool = False
+    ) -> Callable[[Scan], T_pvproperty]:
         """
         Periodically call a function to update a pvproperty.
 
@@ -1024,7 +1177,7 @@ class pvproperty:
             pvproperty startup function signature:
                 (group, instance, async_library)
         """
-        def wrapper(func):
+        def wrapper(func: Scan) -> T_pvproperty:
             check_signature('scan', func, expect_method=True)
             wrapped = scan_wrapper(
                 func, period,
@@ -1046,7 +1199,14 @@ class pvproperty:
 
         return wrapper
 
-    def __call__(self, get, put=None, startup=None, shutdown=None, scan=None):
+    def __call__(
+        self: T_pvproperty,
+        get: Getter,
+        put: Optional[Putter] = None,
+        startup: Optional[Startup] = None,
+        shutdown: Optional[Shutdown] = None,
+        scan: Optional[Scan] = None,
+    ) -> T_pvproperty:
         # handles case where pvproperty(**spec_kw)(getter, putter, startup) is
         # used
         pvspec = self.pvspec
@@ -1069,7 +1229,7 @@ class pvproperty:
         return self
 
     @classmethod
-    def from_pvspec(cls, pvspec, **kwargs):
+    def from_pvspec(cls, pvspec: PVSpec, **kwargs):
         """
         Create a pvproperty from a PVSpec instance.
 
@@ -1092,7 +1252,7 @@ class pvproperty:
         return self.field_spec
 
 
-class NestedPvproperty(pvproperty):
+class NestedPvproperty(pvproperty[T_Data]):
     """
     Nested pvproperty which allows decorator usage in parent class
 
@@ -1105,34 +1265,33 @@ class NestedPvproperty(pvproperty):
         ... scratch that, bonus points to me, I think.
     """
 
-    def getter(self, get):
+    def getter(self, get: Getter[T_Data]) -> PVGroup:
         super().getter(get)
         return self.parent
 
-    def putter(self, put):
+    def putter(self, put: Putter) -> PVGroup:
         super().putter(put)
         return self.parent
 
-    def startup(self, startup):
+    def startup(self, startup: Startup) -> PVGroup:
         super().startup(startup)
         return self.parent
 
-    def shutdown(self, shutdown):
+    def shutdown(self, shutdown: Shutdown) -> PVGroup:
         super().shutdown(shutdown)
         return self.parent
 
-    def scan(self, scan):
-        super().scan(scan)
-        return self.parent
+    def scan(self: T_pvproperty, *args, **kwargs) -> Callable[[Scan], T_pvproperty]:
+        return super().scan(*args, **kwargs)
 
     @classmethod
-    def from_pvspec(cls, pvspec, parent):
+    def from_pvspec(cls, pvspec: PVSpec, parent: PVGroup) -> NestedPvproperty:
         prop = super().from_pvspec(pvspec)
         prop.parent = parent
         return prop
 
 
-class SubGroup:
+class SubGroup(Generic[T_PVGroup]):
     """
     A property-like descriptor for specifying a subgroup in a PVGroup.
 
@@ -1146,8 +1305,25 @@ class SubGroup:
     # support copy.copy by keeping this here
     _class_dict = None
 
-    def __init__(self, group=None, *, prefix=None, macros=None,
-                 attr_separator=None, doc=None, base=None, **init_kwargs):
+    _group_dict: Optional[Dict[str, ChannelData]]
+    attr_separator: Optional[str]
+    base: Tuple[Type, ...]
+    group_cls: Optional[Type[T_PVGroup]]
+    init_kwargs: Dict[str, Any]
+    macros: Dict[str, str]
+    prefix: Optional[str]
+
+    def __init__(
+        self,
+        group: Optional[Type[T_PVGroup]] = None,
+        *,
+        prefix: Optional[str] = None,
+        macros: Optional[Dict[str, str]] = None,
+        attr_separator: Optional[str] = None,
+        doc: Optional[str] = None,
+        base: Optional[Tuple[Type, ...]] = None,
+        **init_kwargs
+    ):
         self.attr_name = None  # to be set later
 
         # group_dict is passed in -> generate class_dict -> generate group_cls
@@ -1165,7 +1341,7 @@ class SubGroup:
         self.group = group
 
     @property
-    def group(self):
+    def group(self) -> Tuple[Dict[str, PvpropertyData], Type[T_PVGroup]]:
         'Property handling either group dict or group class'
         return (self.group_dict, self.group_cls)
 
@@ -1182,15 +1358,27 @@ class SubGroup:
             self.group_dict = None
             self.group_cls = None
 
-    def __get__(self, instance, owner):
+    @typing.overload
+    def __get__(self: T_SubGroup, instance: None, owner: Any) -> T_SubGroup:
+        ...
+
+    @typing.overload
+    def __get__(self, instance: PVGroup, owner: Any) -> T_PVGroup:
+        ...
+
+    def __get__(
+        self: T_SubGroup,
+        instance: Optional[PVGroup],
+        owner: Any,
+    ) -> Union[T_PVGroup, T_SubGroup]:
         if instance is None:
             return self
         return instance.groups[self.attr_name]
 
-    def __set__(self, instance, value):
+    def __set__(self, instance: PVGroup, value: PVGroup):
         instance.groups[self.attr_name] = value
 
-    def __delete__(self, instance):
+    def __delete__(self, instance: PVGroup):
         del instance.groups[self.attr_name]
 
     @staticmethod
@@ -1280,7 +1468,7 @@ class SubGroup:
         return super().__getattribute__(attr)
 
 
-def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
+def get_pv_pair_wrapper(setpoint_suffix: str = "", readback_suffix: str = "_RBV"):
     """
     Generates a Subgroup class for a pair of PVs (setpoint and readback).
 
@@ -1306,14 +1494,29 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
         `readback_kw`, respectively.
     """
 
-    def wrapped(*, get=None, put=None, startup=None, shutdown=None, name=None,
-                dtype=None, value=None, max_length=None, alarm_group=None,
-                doc=None, fields=None, scan=None, setpoint_kw=None,
-                readback_kw=None,
-                **cls_kwargs):
-        if cls_kwargs.pop('read_only', None) not in (None, False):
-            raise RuntimeError('Read-only settings for a setpoint/readback '
-                               'pair should not be specified')
+    def wrapped(
+        *,
+        get=None,
+        put=None,
+        startup=None,
+        shutdown=None,
+        name=None,
+        dtype: Optional[Type[T_Data]] = None,
+        value=None,
+        max_length=None,
+        alarm_group=None,
+        doc=None,
+        fields=None,
+        scan=None,
+        setpoint_kw=None,
+        readback_kw=None,
+        **cls_kwargs
+    ) -> _ReadWriteSubGroup[T_Data]:
+        if cls_kwargs.pop("read_only", None) not in (None, False):
+            raise RuntimeError(
+                "Read-only settings for a setpoint/readback "
+                "pair should not be specified"
+            )
 
         pvspec_kwargs = dict(
             dtype=dtype, value=value, max_length=max_length,
@@ -1323,9 +1526,11 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
 
         if put is None:
             # Create a default putter method
-            async def put(obj, instance, value):
+            async def _put(obj, instance, value):
                 'Default putter - assign value to readback'
                 await obj.readback.write(value)
+
+            put = _put
 
         def get_kwargs(user_specified_kwargs, **init_kwargs):
             for key, val in (user_specified_kwargs or {}).items():
@@ -1780,6 +1985,16 @@ class _StateUpdateContext:
     async def __aexit__(self, exc_type, exc_value, traceback):
         for prop in self.pv_group.attr_pvdb.values():
             prop.post_state_change(self.state, self.value)
+
+
+class _ReadWriteSubGroup(PVGroup, Generic[T_Data]):
+    """
+    Annotation helper for :func:`get_pv_pair_wrapper`
+    """
+    # Stand-in for a SubGroup interface of sorts - pyright fails to find
+    # readback/setpoint with SubGroup as a base class)
+    readback = pvproperty[T_Data](doc="The read-only readback value")
+    setpoint = pvproperty[T_Data](doc="The read-write setpoint value")
 
 
 def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
