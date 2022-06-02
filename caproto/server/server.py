@@ -6,6 +6,8 @@ a single asyncio library.
 
 For an example server implementation, see caproto.curio.server
 """
+from __future__ import annotations
+
 import argparse
 import copy
 import enum
@@ -13,18 +15,19 @@ import inspect
 import logging
 import sys
 import time
+import typing
 from collections import OrderedDict, defaultdict, namedtuple
 from types import MethodType
-from typing import Optional
+from typing import Optional, Type, Union
 
 from caproto._log import _set_handler_with_logger, set_handler
 
 from .. import (AccessRights, AlarmSeverity, AlarmStatus,
                 CaprotoAttributeError, CaprotoRuntimeError, CaprotoTypeError,
                 CaprotoValueError, ChannelAlarm, ChannelByte, ChannelChar,
-                ChannelDouble, ChannelEnum, ChannelFloat, ChannelInteger,
-                ChannelShort, ChannelString, ChannelType, __version__,
-                get_server_address_list)
+                ChannelData, ChannelDouble, ChannelEnum, ChannelFloat,
+                ChannelInteger, ChannelShort, ChannelString, ChannelType,
+                __version__, get_server_address_list)
 from .._backend import backend
 
 module_logger = logging.getLogger(__name__)
@@ -924,7 +927,19 @@ class pvproperty:
             copied.field_spec.prop = copied
         return copied
 
-    def __get__(self, instance, owner):
+    @typing.overload
+    def __get__(self, instance: None, owner: None) -> pvproperty:
+        ...
+
+    @typing.overload
+    def __get__(self, instance: PVGroup, owner: Type[PVGroup]) -> ChannelData:
+        ...
+
+    def __get__(
+        self,
+        instance: Optional[PVGroup],
+        owner: Optional[Type[PVGroup]],
+    ) -> Union[ChannelData, pvproperty]:
         """Descriptor method: get the pvproperty instance from a group."""
         if instance is None:
             # `class.pvproperty`
@@ -982,8 +997,15 @@ class pvproperty:
         self.pvspec = self.pvspec._replace(shutdown=shutdown)
         return self
 
-    def scan(self, period, *, subtract_elapsed=True, stop_on_error=False,
-             failure_severity=AlarmSeverity.MAJOR_ALARM, use_scan_field=False):
+    def scan(
+        self,
+        period,
+        *,
+        subtract_elapsed=True,
+        stop_on_error=False,
+        failure_severity=AlarmSeverity.MAJOR_ALARM,
+        use_scan_field=False
+    ) -> pvproperty:
         """
         Periodically call a function to update a pvproperty.
 
@@ -1168,7 +1190,19 @@ class SubGroup:
             self.group_dict = None
             self.group_cls = None
 
-    def __get__(self, instance, owner):
+    @typing.overload
+    def __get__(self, instance: None, owner: None) -> SubGroup:
+        ...
+
+    @typing.overload
+    def __get__(self, instance: PVGroup, owner: Type[PVGroup]) -> PVGroup:
+        ...
+
+    def __get__(
+        self,
+        instance: Optional[PVGroup],
+        owner: Optional[Type[PVGroup]],
+    ) -> Union[PVGroup, SubGroup]:
         if instance is None:
             return self
         return instance.groups[self.attr_name]
@@ -1266,7 +1300,7 @@ class SubGroup:
         return super().__getattribute__(attr)
 
 
-def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
+def get_pv_pair_wrapper(setpoint_suffix: str = "", readback_suffix: str = "_RBV"):
     """
     Generates a Subgroup class for a pair of PVs (setpoint and readback).
 
@@ -1292,11 +1326,24 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
         `readback_kw`, respectively.
     """
 
-    def wrapped(*, get=None, put=None, startup=None, shutdown=None, name=None,
-                dtype=None, value=None, max_length=None, alarm_group=None,
-                doc=None, fields=None, scan=None, setpoint_kw=None,
-                readback_kw=None,
-                **cls_kwargs):
+    def wrapped(
+        *,
+        get=None,
+        put=None,
+        startup=None,
+        shutdown=None,
+        name=None,
+        dtype=None,
+        value=None,
+        max_length=None,
+        alarm_group=None,
+        doc=None,
+        fields=None,
+        scan=None,
+        setpoint_kw=None,
+        readback_kw=None,
+        **cls_kwargs
+    ) -> _ReadWriteSubGroup:
         if cls_kwargs.pop('read_only', None) not in (None, False):
             raise RuntimeError('Read-only settings for a setpoint/readback '
                                'pair should not be specified')
@@ -1767,6 +1814,16 @@ class PVGroup(metaclass=PVGroupMeta):
         'Generic write called for channels without `put` defined'
         self.log.debug('group_write: %s = %s', instance.pvspec.attr, value)
         return value
+
+
+class _ReadWriteSubGroup(PVGroup):
+    """
+    Annotation helper for :func:`get_pv_pair_wrapper`
+    """
+    # Stand-in for a SubGroup interface of sorts - pyright fails to find
+    # readback/setpoint with SubGroup as a base class)
+    readback = pvproperty(doc="The read-only readback value")
+    setpoint = pvproperty(doc="The read-write setpoint value")
 
 
 def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
