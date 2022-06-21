@@ -257,6 +257,22 @@ class SelectorThread:
                     bytes_available = socket_bytes_available(
                         sock, available_buffer=avail_buf)
                     bytes_recv, address = sock.recvfrom(bytes_available)
+                except ConnectionResetError as ex:
+                    if sock.type == socket.SOCK_DGRAM:
+                        # Win32: "On a UDP-datagram socket this error indicates
+                        # a previous send operation resulted in an ICMP Port
+                        # Unreachable message."
+                        #
+                        # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                        obj.log.debug(
+                            "UDP socket indicates previous send failed %s: %s",
+                            obj,
+                            ex
+                        )
+                        continue
+
+                    obj.log.error("Removing %s due to %s (%s)", obj, ex, ex.errno)
+                    self.remove_socket(sock)
                 except OSError as ex:
                     if ex.errno != errno.EAGAIN:
                         # register as a disconnection

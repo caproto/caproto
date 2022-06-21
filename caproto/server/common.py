@@ -741,12 +741,18 @@ class Context:
                 bytes_received, address = await udp_sock.recvfrom(
                     MAX_UDP_RECV
                 )
+            except ConnectionResetError:
+                # Win32: "On a UDP-datagram socket this error indicates
+                # a previous send operation resulted in an ICMP Port
+                # Unreachable message."
+                #
+                # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                self.log.debug('UDP server recvfrom error')
             except OSError:
                 self.log.exception('UDP server recvfrom error')
-                await self.async_layer.library.sleep(0.1)
-                continue
-            if bytes_received:
-                await self._broadcaster_recv_datagram(bytes_received, address)
+            else:
+                if bytes_received:
+                    await self._broadcaster_recv_datagram(bytes_received, address)
 
     async def _broadcaster_recv_datagram(self, bytes_received, address):
         try:
