@@ -1,6 +1,6 @@
 import time
 
-from caproto.threading.client import SharedBroadcaster, Context
+from caproto.threading.client import Context, SharedBroadcaster
 
 
 def main(pvname1='int', pvname2='str'):
@@ -15,7 +15,7 @@ def main(pvname1='int', pvname2='str'):
     # Some user function to call when subscriptions receive data.
     called = []
 
-    def user_callback(command):
+    def user_callback(sub, command):
         print("Subscription has received data: {}".format(command))
         called.append(command)
 

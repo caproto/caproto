@@ -1,6 +1,5 @@
 import time
 
-import curio
 import pytest
 
 import caproto as ca
@@ -23,17 +22,16 @@ def test_asyncio_client_example(ioc):
     ca.asyncio.utils.run(coro, debug=True)
 
 
-def test_thread_client_example(curio_server):
+def test_thread_client_example(sample_server_pvdb):
     from caproto.examples.thread_client_simple import main as example_main
-    server_runner, prefix, caget_pvdb = curio_server
 
-    @conftest.threaded_in_curio_wrapper
+    pvname1, = [pv for pv in sample_server_pvdb if pv.endswith("int")]
+    pvname2, = [pv for pv in sample_server_pvdb if pv.endswith("str")]
+
     def client():
-        example_main(pvname1=prefix + 'int',
-                     pvname2=prefix + 'str')
+        example_main(pvname1=pvname1, pvname2=pvname2)
 
-    with curio.Kernel() as kernel:
-        kernel.run(server_runner, client)
+    conftest.asyncio_runner(sample_server_pvdb, client, threaded_client=True)
 
 
 @pytest.mark.flaky(reruns=2, reruns_delay=2)

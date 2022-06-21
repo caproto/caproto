@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from types import SimpleNamespace
+from typing import Dict
 
 import pytest
 
@@ -624,7 +625,7 @@ def pvdb_from_server_example():
 
 
 @pytest.fixture(scope='function')
-def curio_server(prefix):
+def sample_server_pvdb(prefix: str) -> Dict[str, ca.ChannelData]:
     str_alarm_status = ca.ChannelAlarm(
         status=ca.AlarmStatus.READ,
         severity=ca.AlarmSeverity.MINOR_ALARM,
@@ -675,158 +676,134 @@ def curio_server(prefix):
     }
 
     # tack on a unique prefix
-    caget_pvdb = {prefix + key: value
-                  for key, value in caget_pvdb.items()}
+    return {
+        prefix + key: value
+        for key, value in caget_pvdb.items()
+    }
 
+
+def curio_runner(pvdb, client, *, threaded_client=False):
     # Hide these imports so that the other fixtures are usable by other
     # libraries (e.g. ophyd) without the experimental dependencies.
     import curio
 
     import caproto.curio
 
-    async def _server(pvdb):
-        ctx = caproto.curio.server.Context(pvdb)
+    async def curio_startup_hook(async_lib):
+        await curio_event.set()
+
+    async def server_main():
         try:
-            await ctx.run()
+            ctx = caproto.curio.server.Context(pvdb)
+            await ctx.run(startup_hook=curio_startup_hook)
         except caproto.curio.server.ServerExit:
-            logger.info('ServerExit caught; exiting')
+            logger.info('Server exited normally')
         except Exception as ex:
             logger.error('Server failed: %s %s', type(ex), ex)
             raise
 
-    async def run_server(client, *, pvdb=caget_pvdb):
-        server_task = await curio.spawn(_server, pvdb, daemon=True)
-
+    async def run_server_and_client():
         try:
-            await client()
-        except caproto.curio.server.ServerExit:
-            ...
-        finally:
-            await server_task.cancel()
-
-    return run_server, prefix, caget_pvdb
-
-
-@pytest.fixture(scope='function',
-                params=['curio', 'trio', 'asyncio'])
-def server(request):
-
-    def curio_runner(pvdb, client, *, threaded_client=False):
-        # Hide these imports so that the other fixtures are usable by other
-        # libraries (e.g. ophyd) without the experimental dependencies.
-        import curio
-
-        import caproto.curio
-
-        async def curio_startup_hook(async_lib):
-            await curio_event.set()
-
-        async def server_main():
-            try:
-                ctx = caproto.curio.server.Context(pvdb)
-                await ctx.run(startup_hook=curio_startup_hook)
-            except caproto.curio.server.ServerExit:
-                logger.info('Server exited normally')
-            except Exception as ex:
-                logger.error('Server failed: %s %s', type(ex), ex)
-                raise
-
-        async def run_server_and_client():
-            try:
-                server_task = await curio.spawn(server_main)
-                await curio_event.wait()
-                # Give this a couple tries, akin to poll_readiness.
-                for _ in range(15):
-                    try:
-                        if threaded_client:
-                            await threaded_in_curio_wrapper(client)()
-                        else:
-                            await client()
-                    except TimeoutError:
-                        continue
-                    else:
-                        break
-                else:
-                    raise TimeoutError("ioc failed to start")
-            finally:
-                await server_task.cancel()
-
-        with curio.Kernel() as kernel:
-            curio_event = curio.Event()
-            kernel.run(run_server_and_client)
-
-    def trio_runner(pvdb, client, *, threaded_client=False):
-        # Hide these imports so that the other fixtures are usable by other
-        # libraries (e.g. ophyd) without the experimental dependencies.
-        import trio
-
-        import caproto.trio
-
-        async def trio_server_main(task_status):
-            async def trio_server_startup(async_lib):
-                task_status.started(ctx)
-
-            try:
-                ctx = caproto.trio.server.Context(pvdb)
-                await ctx.run(startup_hook=trio_server_startup)
-            except Exception as ex:
-                logger.error('Server failed: %s %s', type(ex), ex)
-                raise
-
-        async def run_server_and_client():
-            async with trio.open_nursery() as test_nursery:
-                server_context = await test_nursery.start(trio_server_main)
-                # Give this a couple tries, akin to poll_readiness.
-                for _ in range(15):
-                    try:
-                        if threaded_client:
-                            await trio.to_thread.run_sync(client)
-                        else:
-                            await client(test_nursery, server_context)
-                    except TimeoutError:
-                        continue
-                    else:
-                        break
-                server_context.stop()
-                # don't leave the server running:
-                test_nursery.cancel_scope.cancel()
-
-        trio.run(run_server_and_client)
-
-    def asyncio_runner(pvdb, client, *, threaded_client=False):
-        async def asyncio_startup_hook(async_lib):
-            event.set()
-
-        async def asyncio_server_main():
-            try:
-                ctx = caproto.asyncio.server.Context(pvdb)
-                await ctx.run(startup_hook=asyncio_startup_hook)
-            except Exception as ex:
-                logger.error('Server failed: %s %s', type(ex), ex)
-                raise
-
-        async def run_server_and_client(loop):
-            tsk = loop.create_task(asyncio_server_main())
+            server_task = await curio.spawn(server_main)
+            await curio_event.wait()
             # Give this a couple tries, akin to poll_readiness.
-            await event.wait()
             for _ in range(15):
                 try:
                     if threaded_client:
-                        await loop.run_in_executor(None, client)
+                        await threaded_in_curio_wrapper(client)()
                     else:
                         await client()
                 except TimeoutError:
                     continue
                 else:
                     break
-            tsk.cancel()
-            await asyncio.wait((tsk, ))
+            else:
+                raise TimeoutError("ioc failed to start")
+        finally:
+            await server_task.cancel()
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        event = asyncio.Event()
-        loop.run_until_complete(run_server_and_client(loop))
+    with curio.Kernel() as kernel:
+        curio_event = curio.Event()
+        kernel.run(run_server_and_client)
 
+
+def trio_runner(pvdb, client, *, threaded_client=False):
+    # Hide these imports so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import trio
+
+    import caproto.trio
+
+    async def trio_server_main(task_status):
+        async def trio_server_startup(async_lib):
+            task_status.started(ctx)
+
+        try:
+            ctx = caproto.trio.server.Context(pvdb)
+            await ctx.run(startup_hook=trio_server_startup)
+        except Exception as ex:
+            logger.error('Server failed: %s %s', type(ex), ex)
+            raise
+
+    async def run_server_and_client():
+        async with trio.open_nursery() as test_nursery:
+            server_context = await test_nursery.start(trio_server_main)
+            # Give this a couple tries, akin to poll_readiness.
+            for _ in range(15):
+                try:
+                    if threaded_client:
+                        await trio.to_thread.run_sync(client)
+                    else:
+                        await client(test_nursery, server_context)
+                except TimeoutError:
+                    continue
+                else:
+                    break
+            server_context.stop()
+            # don't leave the server running:
+            test_nursery.cancel_scope.cancel()
+
+    trio.run(run_server_and_client)
+
+
+def asyncio_runner(pvdb, client, *, threaded_client=False):
+    async def asyncio_startup_hook(async_lib):
+        event.set()
+
+    async def asyncio_server_main():
+        try:
+            ctx = caproto.asyncio.server.Context(pvdb)
+            await ctx.run(startup_hook=asyncio_startup_hook)
+        except Exception as ex:
+            logger.error('Server failed: %s %s', type(ex), ex)
+            raise
+
+    async def run_server_and_client(loop):
+        tsk = loop.create_task(asyncio_server_main())
+        # Give this a couple tries, akin to poll_readiness.
+        await event.wait()
+        for _ in range(15):
+            try:
+                if threaded_client:
+                    await loop.run_in_executor(None, client)
+                else:
+                    await client()
+            except TimeoutError:
+                continue
+            else:
+                break
+        tsk.cancel()
+        await asyncio.wait((tsk, ))
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    event = asyncio.Event()
+    loop.run_until_complete(run_server_and_client(loop))
+
+
+@pytest.fixture(scope='function',
+                params=['curio', 'trio', 'asyncio'])
+def server(request):
     if request.param == 'curio':
         curio_runner.backend = 'curio'
         return curio_runner
