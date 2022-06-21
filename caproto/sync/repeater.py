@@ -25,11 +25,11 @@ import subprocess
 import sys
 import time
 import warnings
+from typing import List
 
 import caproto
 from caproto._constants import MAX_UDP_RECV
 from caproto._utils import get_environment_variables
-
 
 logger = logging.getLogger('caproto.repeater')
 
@@ -38,14 +38,15 @@ class RepeaterAlreadyRunning(RuntimeError):
     ...
 
 
-def check_clients(clients, skip=None):
-    'Check clients by binding to their ports on specific interfaces'
+def check_ports_in_use(ports: List[int]):
+    "Check if ports are still in use by binding to them."
     sock = None
-    for port, host in clients.items():
-        addr = (host, port)
+    for port in ports:
+        addr = ("", port)
         if sock is None:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                                 socket.IPPROTO_UDP)
+            sock = socket.socket(
+                socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP
+            )
         try:
             sock.bind(addr)
         except Exception:
@@ -145,7 +146,7 @@ def _run_repeater(server_sock, bind_addr):
                     raise caproto.CaprotoNetworkError(
                         f"Failed to send to {host}:{port}") from exc
 
-                remove_clients = list(check_clients(clients, skip=port))
+                remove_clients = list(check_ports_in_use(list(clients)))
                 _update_all(clients, servers, remove_clients=remove_clients)
                 # Do not broadcast registration requests to other clients.
                 # Omit it from `to_forward`.
