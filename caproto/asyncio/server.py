@@ -78,6 +78,17 @@ class VirtualCircuit(_VirtualCircuit):
         self.tasks.create(self.command_queue_loop())
         self._sub_task = self.tasks.create(self.subscription_queue_loop())
 
+    async def command_queue_loop(self):
+        loop = asyncio.get_running_loop()
+        try:
+            return await super().command_queue_loop()
+        except RuntimeError:
+            if loop.is_closed():
+                # Intended to catch: RuntimeError: Event loop is closed
+                return
+            # And raise for everything else
+            raise
+
     async def _start_write_task(self, handle_write):
         self.tasks.create(handle_write())
 
