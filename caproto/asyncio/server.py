@@ -1,6 +1,5 @@
 import asyncio
 import functools
-import sys
 import warnings
 
 import caproto as ca
@@ -248,13 +247,18 @@ class Context(_Context):
         queue = self.broadcaster_datagram_queue
         while True:
             interface, data, address = await queue.async_get()
-            if isinstance(data, Exception):
-                self.log.exception('Broadcaster failed to receive on %s',
-                                   interface, exc_info=data)
-                if sys.platform == 'win32':
-                    self.log.warning(
-                        'Re-initializing socket on interface %s', interface
-                    )
+            if isinstance(data, ConnectionResetError):
+                ...
+                # Win32: "On a UDP-datagram socket this error indicates a
+                # previous send operation resulted in an ICMP Port Unreachable
+                # message."
+                #
+                # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+            elif isinstance(data, Exception):
+                self.log.exception(
+                    "Broadcaster failed to receive on %s",
+                    interface, exc_info=data
+                )
             else:
                 await self._broadcaster_recv_datagram(data, address)
 

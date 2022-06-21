@@ -215,6 +215,17 @@ class SharedBroadcaster:
         queues = collections.defaultdict(list)
         while True:
             _, bytes_received, address = await self.receive_queue.async_get()
+            if isinstance(bytes_received, ConnectionResetError):
+                # Win32: "On a UDP-datagram socket this error indicates a
+                # previous send operation resulted in an ICMP Port Unreachable
+                # message."
+                #
+                # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                self.log.debug(
+                    "Broadcaster received ConnectionResetError",
+                    exc_info=bytes_received
+                )
+                continue
             if isinstance(bytes_received, Exception):
                 self.log.exception('Broadcaster receive exception',
                                    exc_info=bytes_received)
