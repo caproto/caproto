@@ -43,8 +43,11 @@ def test_array_filter(request, prefix, context, filter, expected, type_varieties
     pv.wait_for_connection()
     event = threading.Event()
 
-    def cb(sub, reading):
-        assert list(reading.data) == expected
+    subscription_reading = None
+
+    def cb(_, reading):
+        nonlocal subscription_reading
+        subscription_reading = reading
         event.set()
 
     # Test read.
@@ -56,6 +59,8 @@ def test_array_filter(request, prefix, context, filter, expected, type_varieties
     sub.add_callback(cb)
     # Wait for callback to process.
     event.wait(timeout=2)
+    assert subscription_reading is not None
+    assert list(subscription_reading.data) == expected
 
 
 def test_ts_filter(request, prefix, context, type_varieties_ioc):
