@@ -802,7 +802,7 @@ def server(request):
             for _ in range(15):
                 try:
                     if threaded_client:
-                        await loop.run_in_executor(client)
+                        await loop.run_in_executor(None, client)
                     else:
                         await client()
                 except TimeoutError:

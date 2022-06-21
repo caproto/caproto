@@ -1,10 +1,13 @@
+import asyncio
 import logging
 import os
 import threading
-import time
+from typing import Any, Callable, Optional
 
-import curio
 import pytest
+
+import caproto
+import caproto.asyncio
 
 try:
     import catvs
@@ -19,53 +22,54 @@ logger = logging.getLogger(__name__)
 # logging.getLogger('caproto').setLevel('DEBUG')
 
 
-def server_thread(context):
-    async def server():
-        return await context.run(log_pv_names=True)
+@pytest.fixture(scope="function", params=["asyncio"])
+def catvs_ioc_runner():
+    def asyncio_runner(client: Callable, *, threaded_client: bool = False):
+        async def asyncio_startup(async_lib):
+            asyncio_runner.thread_event.set()
+            asyncio_runner.event.set()
 
-    with curio.Kernel() as kernel:
-        kernel.run(server)
+        async def asyncio_server_main():
+            try:
+                orig_port = os.environ.get("EPICS_CA_SERVER_PORT", "5064")
+                group = CatvsIOC(prefix="")
+                os.environ["EPICS_CA_SERVER_PORT"] = str(asyncio_runner.port)
+                asyncio_runner.context = caproto.asyncio.server.Context(group.pvdb)
+                await asyncio_runner.context.run(startup_hook=asyncio_startup)
+            except Exception as ex:
+                logger.error("Server failed: %s %s", type(ex), ex)
+                raise
+            finally:
+                os.environ["EPICS_CA_SERVER_PORT"] = orig_port
 
+        async def run_server_and_client(loop):
+            tsk = loop.create_task(asyncio_server_main())
+            # Give this a couple tries, akin to poll_readiness.
+            await asyncio_runner.event.wait()
+            for _ in range(5):
+                try:
+                    if threaded_client:
+                        await loop.run_in_executor(None, client)
+                    else:
+                        await client()
+                except TimeoutError:
+                    continue
+                else:
+                    break
+            tsk.cancel()
+            await asyncio.wait((tsk, ))
 
-@pytest.fixture(params=['curio'],  # 'trio', 'asyncio', 'epics-base'],
-                scope='function')
-def catvs_ioc(request):
-    from caproto.curio.server import Context
+        loop.run_until_complete(run_server_and_client(loop))
 
-    pvgroup = CatvsIOC(prefix='')
-
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     # NOTE: catvs expects server tcp_port==udp_port, so make a weak attempt
     # here to avoid clashing between servers
-    port = list(ca.random_ports(1))[0]
-
-    try:
-        # The environment variale only needs to e set for the initializer of
-        # Context.
-        os.environ['EPICS_CA_SERVER_PORT'] = str(port)
-        context = Context(pvgroup.pvdb, ['127.0.0.1'])
-    finally:
-        os.environ['EPICS_CA_SERVER_PORT'] = '5064'
-
-    thread = threading.Thread(target=server_thread, daemon=True,
-                              args=(context, ))
-    thread.start()
-
-    def stop_server():
-        context.log.setLevel('INFO')
-        context.stop()
-
-    request.addfinalizer(stop_server)
-
-    while getattr(context, 'port', None) is None:
-        logger.info('Waiting on catvs test server...')
-        time.sleep(0.1)
-
-    tcp_port = context.port
-    udp_port = context.ca_server_port
-    logger.info('catvs test server started up on port %d (udp port %d)',
-                tcp_port, udp_port)
-    time.sleep(0.5)
-    return pvgroup, context, thread
+    asyncio_runner.port = list(ca.random_ports(1))[0]
+    asyncio_runner.backend = "asyncio"
+    asyncio_runner.thread_event = threading.Event()
+    asyncio_runner.event = asyncio.Event()
+    return asyncio_runner
 
 
 def hacked_setup(test_inst, port):
@@ -99,40 +103,46 @@ else:
     all_tests = get_all_tests()
 
 
-SKIPPED = ('TestScalar-test_get_bad',
-           'TestScalar-test_put',
-           'TestArray-test_monitor_three_fixed',
-           'TestArray-test_monitor_zero_dynamic',
-           'TestArray-test_put',
-           )
+SKIPPED = (
+    "TestScalar-test_get_bad",
+    "TestScalar-test_put",
+    "TestArray-test_monitor_three_fixed",
+    "TestArray-test_monitor_zero_dynamic",
+    "TestArray-test_put",
+)
+
+
+def assert_equal(a: Any, b: Any, msg: Optional[str] = None):
+    if msg is not None:
+        assert a == b, msg
+    else:
+        assert a == b
+
+
+def assert_ca_equal(msg: str, **kwargs):
+    received = dict((name, getattr(msg, name))
+                    for name in kwargs)
+    expected = kwargs
+    assert received == expected
 
 
 @pytest.mark.skipif(catvs is None, reason='catvs unavailable')
 @pytest.mark.parametrize('test_class, test_name', all_tests)
-def test_catvs(catvs_ioc, test_class, test_name):
+def test_catvs(catvs_ioc_runner: Callable, test_class: type, test_name: str):
     if f'{test_class.__name__}-{test_name}' in SKIPPED:
         pytest.skip("known difference in behavior with epics-base")
 
-    pvgroup, context, server_thread = catvs_ioc
-    test_inst = test_class()
+    def client_test():
+        test_inst = test_class()
 
-    def assert_equal(a, b, msg=None):
-        if msg is not None:
-            assert a == b, msg
-        else:
-            assert a == b
+        test_inst.assertEqual = assert_equal
+        test_inst.assertCAEqual = assert_ca_equal
 
-    def assert_ca_equal(msg, **kwargs):
-        received = dict((name, getattr(msg, name))
-                        for name in kwargs)
-        expected = kwargs
-        assert received == expected
+        ctx = catvs_ioc_runner.context
 
-    test_inst.assertEqual = assert_equal
-    test_inst.assertCAEqual = assert_ca_equal
+        port = ctx.ca_server_port if "udp" in test_name.lower() else ctx.port
+        hacked_setup(test_inst, port)
+        test_func = getattr(test_inst, test_name)
+        test_func()
 
-    port = (context.ca_server_port if 'udp' in test_name.lower()
-            else context.port)
-    hacked_setup(test_inst, port)
-    test_func = getattr(test_inst, test_name)
-    test_func()
+    catvs_ioc_runner(client_test, threaded_client=True)
