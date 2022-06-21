@@ -39,7 +39,7 @@ def send(circuit, command, pv_name=None):
     else:
         tags = None
     buffers_to_send = circuit.send(command, extra=tags)
-    sockets[circuit].sendmsg(buffers_to_send)
+    sockets[circuit].sendall(b"".join(buffers_to_send))
 
 
 def recv(circuit):

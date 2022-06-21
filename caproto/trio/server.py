@@ -1,4 +1,5 @@
 import functools
+import threading
 
 import trio
 from trio import socket
@@ -94,7 +95,6 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
-        self._raw_lock = trio.Lock()
         self.nursery = context.nursery
         self.QueueFull = trio.WouldBlock
 
@@ -163,6 +163,35 @@ class VirtualCircuit(_VirtualCircuit):
     async def _wake_new_command(self):
         async with self.new_command_condition:
             self.new_command_condition.notify_all()
+
+
+class TrioSocketStreamCompat:
+    _sock: socket.socket  # trio._socket._SocketType
+    _stream: trio.SocketStream
+    _token: trio.lowlevel.TrioToken
+    _raw_lock: trio.StrictFIFOLock
+
+    def __init__(self, sock: socket.socket, token: trio.lowlevel.TrioToken):
+        self._sock = sock
+        self._stream = trio.SocketStream(sock)
+        self._token = token
+        self._raw_lock = trio.StrictFIFOLock()
+
+    async def recv(self, max_bytes=None):
+        return await self._stream.receive_some(max_bytes)
+
+    def close(self, *args, **kwargs):
+        def _close():
+            trio.from_thread.run(self._stream.aclose, trio_token=self._token)
+
+        threading.Thread(target=_close, daemon=True).start()
+
+    def getsockname(self, *args, **kwargs):
+        return self._sock.getsockname()
+
+    async def sendall(self, data):
+        async with self._raw_lock:
+            return await self._stream.send_all(data)
 
 
 class Context(_Context):
@@ -236,8 +265,14 @@ class Context(_Context):
             listen_sock.listen()
             task_status.started()
             while True:
-                client_sock, addr = await listen_sock.accept()
-                self.nursery.start_soon(self.tcp_handler, client_sock, addr)
+                trio_sock, addr = await listen_sock.accept()
+                stream = TrioSocketStreamCompat(
+                    sock=trio_sock,
+                    token=trio.lowlevel.current_trio_token()
+                )
+                self.nursery.start_soon(
+                    self.tcp_handler, stream, addr
+                )
         finally:
             listen_sock.close()
 

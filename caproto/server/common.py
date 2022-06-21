@@ -151,8 +151,8 @@ class VirtualCircuit:
             buffers_to_send = self.circuit.send(*commands)
             # send bytes over the wire using some caproto utilities
             try:
-                async with self._raw_lock:
-                    await ca.async_send_all(buffers_to_send, self.client.sendmsg)
+                bytes_to_send = b"".join(buffers_to_send)
+                await self.client.sendall(bytes_to_send)
             except (OSError, CaprotoNetworkError) as ex:
                 raise DisconnectedCircuit(
                     f"Circuit disconnected: {ex}"

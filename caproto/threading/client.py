@@ -184,6 +184,7 @@ class SelectorThread:
         self.thread.start()
 
     def add_socket(self, sock, target_obj):
+        assert isinstance(sock, socket.socket)
         with self._socket_map_lock:
             if sock in self.socket_to_id:
                 raise CaprotoValueError('Socket already added')
@@ -1332,19 +1333,13 @@ class VirtualCircuitManager:
     def connected(self):
         return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
-    def _socket_send(self, buffers_to_send):
-        'Send a list of buffers over the socket'
-        try:
-            return self.socket.sendmsg(buffers_to_send)
-        except BlockingIOError:
-            raise ca.SendAllRetry()
-
     def send(self, *commands, extra=None):
         # Turn the crank: inform the VirtualCircuit that these commands will
         # be send, and convert them to buffers.
-        buffers_to_send = self.circuit.send(*commands, extra=extra)
-        # Send bytes over the wire using some caproto utilities.
-        ca.send_all(buffers_to_send, self._socket_send)
+        sock = self.socket
+        if sock is not None:
+            buffers_to_send = self.circuit.send(*commands, extra=extra)
+            sock.sendall(b"".join(buffers_to_send))
 
     def received(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.
