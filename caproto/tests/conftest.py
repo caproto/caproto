@@ -720,6 +720,8 @@ def trio_runner(pvdb, client, *, threaded_client=False):
 
 
 def asyncio_runner(pvdb, client, *, threaded_client=False):
+    event = None
+
     async def asyncio_startup_hook(async_lib):
         event.set()
 
@@ -731,7 +733,10 @@ def asyncio_runner(pvdb, client, *, threaded_client=False):
             logger.error('Server failed: %s %s', type(ex), ex)
             raise
 
-    async def run_server_and_client(loop):
+    async def run_server_and_client():
+        nonlocal event
+        event = asyncio.Event()
+        loop = asyncio.get_running_loop()
         tsk = loop.create_task(asyncio_server_main())
         # Give this a couple tries, akin to poll_readiness.
         await event.wait()
@@ -748,10 +753,7 @@ def asyncio_runner(pvdb, client, *, threaded_client=False):
         tsk.cancel()
         await asyncio.wait((tsk, ))
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    event = asyncio.Event()
-    loop.run_until_complete(run_server_and_client(loop))
+    asyncio.run(run_server_and_client())
 
 
 @pytest.fixture(scope='function',

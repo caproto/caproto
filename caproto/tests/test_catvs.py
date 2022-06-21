@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import threading
 from typing import Any, Callable, Optional
 
 import pytest
@@ -24,14 +23,15 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="function", params=["asyncio"])
 def catvs_ioc_runner():
+    event = None
+
     def asyncio_runner(client: Callable, *, threaded_client: bool = False):
         async def asyncio_startup(async_lib):
-            asyncio_runner.thread_event.set()
-            asyncio_runner.event.set()
+            event.set()
 
         async def asyncio_server_main():
+            orig_port = os.environ.get("EPICS_CA_SERVER_PORT", "5064")
             try:
-                orig_port = os.environ.get("EPICS_CA_SERVER_PORT", "5064")
                 group = CatvsIOC(prefix="")
                 os.environ["EPICS_CA_SERVER_PORT"] = str(asyncio_runner.port)
                 asyncio_runner.context = caproto.asyncio.server.Context(group.pvdb)
@@ -42,10 +42,13 @@ def catvs_ioc_runner():
             finally:
                 os.environ["EPICS_CA_SERVER_PORT"] = orig_port
 
-        async def run_server_and_client(loop):
+        async def run_server_and_client():
+            nonlocal event
+            event = asyncio.Event()
+            loop = asyncio.get_running_loop()
             tsk = loop.create_task(asyncio_server_main())
             # Give this a couple tries, akin to poll_readiness.
-            await asyncio_runner.event.wait()
+            await event.wait()
             for _ in range(5):
                 try:
                     if threaded_client:
@@ -59,16 +62,12 @@ def catvs_ioc_runner():
             tsk.cancel()
             await asyncio.wait((tsk, ))
 
-        loop.run_until_complete(run_server_and_client(loop))
+        asyncio.run(run_server_and_client())
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     # NOTE: catvs expects server tcp_port==udp_port, so make a weak attempt
     # here to avoid clashing between servers
     asyncio_runner.port = list(ca.random_ports(1))[0]
     asyncio_runner.backend = "asyncio"
-    asyncio_runner.thread_event = threading.Event()
-    asyncio_runner.event = asyncio.Event()
     return asyncio_runner
 
 
