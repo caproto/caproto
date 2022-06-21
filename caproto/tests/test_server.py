@@ -44,8 +44,6 @@ caget_checks += [('char', ChannelType.CHAR),
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
 def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
                     dbr_type):
-    caget_pvdb = {prefix + pv_: value
-                  for pv_, value in pvdb_from_server_example.items()}
     pv = prefix + pv
     ctrl_keys = ('upper_disp_limit', 'lower_alarm_limit',
                  'upper_alarm_limit', 'lower_warning_limit',
@@ -61,7 +59,7 @@ def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
         print('* client caget test: pv={} dbr_type={}'.format(pv, dbr_type))
         print(f'(client args: {client_args})')
 
-        db_entry = caget_pvdb[pv]
+        db_entry = pvdb_from_server_example[pv]
         # native type as in the ChannelData database
         db_native = ca.native_type(db_entry.data_type)
         # native type of the request
@@ -163,7 +161,7 @@ def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
         test_completed = True
 
     try:
-        server(pvdb=caget_pvdb, client=client)
+        server(pvdb=pvdb_from_server_example, client=client)
     except OSError:
         if sys.platform == 'win32' and test_completed:
             # WIN32_TODO: windows asyncio stuff is still buggy...
@@ -191,9 +189,6 @@ caput_checks = [('int', '1', 1),
 def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
                     put_value, check_value):
 
-    caget_pvdb = {prefix + pv_: value
-                  for pv_, value in pvdb_from_server_example.items()
-                  }
     pv = prefix + pv
     test_completed = False
 
@@ -205,7 +200,7 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
               ''.format(pv, put_value, check_value))
         print('(client args: {})'.format(client_args))
 
-        db_entry = caget_pvdb[pv]
+        db_entry = pvdb_from_server_example[pv]
         db_old = db_entry.value
         data = await run_caput(server.backend, pv, put_value,
                                as_string=isinstance(db_entry, (ca.ChannelByte,
@@ -256,7 +251,7 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
         test_completed = True
 
     try:
-        server(pvdb=caget_pvdb, client=client)
+        server(pvdb=pvdb_from_server_example, client=client)
     except OSError:
         if sys.platform == 'win32' and test_completed:
             # WIN32_TODO: windows asyncio stuff is still buggy...

@@ -22,16 +22,16 @@ def test_asyncio_client_example(ioc):
     ca.asyncio.utils.run(coro, debug=True)
 
 
-def test_thread_client_example(sample_server_pvdb):
+def test_thread_client_example(pvdb_from_server_example):
     from caproto.examples.thread_client_simple import main as example_main
 
-    pvname1, = [pv for pv in sample_server_pvdb if pv.endswith("int")]
-    pvname2, = [pv for pv in sample_server_pvdb if pv.endswith("str")]
+    pvname1, = [pv for pv in pvdb_from_server_example if pv.endswith("int")]
+    pvname2, = [pv for pv in pvdb_from_server_example if pv.endswith("str")]
 
     def client():
         example_main(pvname1=pvname1, pvname2=pvname2)
 
-    conftest.asyncio_runner(sample_server_pvdb, client, threaded_client=True)
+    conftest.asyncio_runner(pvdb_from_server_example, client, threaded_client=True)
 
 
 @pytest.mark.flaky(reruns=2, reruns_delay=2)

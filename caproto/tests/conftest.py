@@ -567,112 +567,61 @@ def default_teardown_module(module):
     stop_repeater()
 
 
-@pytest.fixture(scope='function')
-def pvdb_from_server_example():
-    alarm = ca.ChannelAlarm(
-        status=ca.AlarmStatus.READ,
-        severity=ca.AlarmSeverity.MINOR_ALARM,
-        alarm_string='alarm string',
-    )
-
-    pvdb = {
-        'pi': ca.ChannelDouble(value=3.14,
-                               lower_disp_limit=3.13,
-                               upper_disp_limit=3.15,
-                               lower_alarm_limit=3.12,
-                               upper_alarm_limit=3.16,
-                               lower_warning_limit=3.11,
-                               upper_warning_limit=3.17,
-                               lower_ctrl_limit=3.10,
-                               upper_ctrl_limit=3.18,
-                               precision=5,
-                               units='doodles',
-                               alarm=alarm,
-                               ),
-        'enum': ca.ChannelEnum(value='b',
-                               enum_strings=['a', 'b', 'c', 'd'],
-                               ),
-        'enum2': ca.ChannelEnum(value='bb',
-                                enum_strings=['aa', 'bb', 'cc', 'dd'],
-                                ),
-        'int': ca.ChannelInteger(value=96,
-                                 units='doodles',
-                                 ),
-        'char': ca.ChannelByte(value=b'3',
-                               units='poodles',
-                               lower_disp_limit=33,
-                               upper_disp_limit=35,
-                               lower_alarm_limit=32,
-                               upper_alarm_limit=36,
-                               lower_warning_limit=31,
-                               upper_warning_limit=37,
-                               lower_ctrl_limit=30,
-                               upper_ctrl_limit=38,
-                               ),
-        'bytearray': ca.ChannelByte(value=b'1234567890' * 2),
-        'chararray': ca.ChannelChar(value=b'1234567890' * 2),
-        'str': ca.ChannelString(value='hello',
-                                string_encoding='latin-1',
-                                alarm=alarm),
-        'str2': ca.ChannelString(value='hello',
-                                 string_encoding='latin-1',
-                                 alarm=alarm),
-        'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
-                                 string_encoding='latin-1'),
-    }
-
-    return pvdb
-
-
-@pytest.fixture(scope='function')
-def sample_server_pvdb(prefix: str) -> Dict[str, ca.ChannelData]:
+@pytest.fixture(scope="function")
+def pvdb_from_server_example(prefix: str) -> Dict[str, ca.ChannelData]:
     str_alarm_status = ca.ChannelAlarm(
         status=ca.AlarmStatus.READ,
         severity=ca.AlarmSeverity.MINOR_ALARM,
-        alarm_string='alarm string',
+        alarm_string="alarm string",
     )
 
     caget_pvdb = {
-        'pi': ca.ChannelDouble(value=3.14,
-                               lower_disp_limit=3.13,
-                               upper_disp_limit=3.15,
-                               lower_alarm_limit=3.12,
-                               upper_alarm_limit=3.16,
-                               lower_warning_limit=3.11,
-                               upper_warning_limit=3.17,
-                               lower_ctrl_limit=3.10,
-                               upper_ctrl_limit=3.18,
-                               precision=5,
-                               units='doodles',
-                               ),
-        'enum': ca.ChannelEnum(value='b',
-                               enum_strings=['a', 'b', 'c', 'd'],
-                               ),
-        'int': ca.ChannelInteger(value=33,
-                                 units='poodles',
-                                 lower_disp_limit=33,
-                                 upper_disp_limit=35,
-                                 lower_alarm_limit=32,
-                                 upper_alarm_limit=36,
-                                 lower_warning_limit=31,
-                                 upper_warning_limit=37,
-                                 lower_ctrl_limit=30,
-                                 upper_ctrl_limit=38,
-                                 ),
-        'char': ca.ChannelByte(value=b'3',
-                               units='poodles',
-                               lower_disp_limit=33,
-                               upper_disp_limit=35,
-                               lower_alarm_limit=32,
-                               upper_alarm_limit=36,
-                               lower_warning_limit=31,
-                               upper_warning_limit=37,
-                               lower_ctrl_limit=30,
-                               upper_ctrl_limit=38,
-                               ),
-        'str': ca.ChannelString(value='hello',
-                                alarm=str_alarm_status,
-                                reported_record_type='caproto'),
+        "pi": ca.ChannelDouble(
+            value=3.14,
+            lower_disp_limit=3.13,
+            upper_disp_limit=3.15,
+            lower_alarm_limit=3.12,
+            upper_alarm_limit=3.16,
+            lower_warning_limit=3.11,
+            upper_warning_limit=3.17,
+            lower_ctrl_limit=3.10,
+            upper_ctrl_limit=3.18,
+            precision=5,
+            units="doodles",
+        ),
+        "enum": ca.ChannelEnum(
+            value="b",
+            enum_strings=["a", "b", "c", "d"],
+        ),
+        "int": ca.ChannelInteger(
+            value=33,
+            units="poodles",
+            lower_disp_limit=33,
+            upper_disp_limit=35,
+            lower_alarm_limit=32,
+            upper_alarm_limit=36,
+            lower_warning_limit=31,
+            upper_warning_limit=37,
+            lower_ctrl_limit=30,
+            upper_ctrl_limit=38,
+        ),
+        "char": ca.ChannelByte(
+            value=b"3",
+            units="poodles",
+            lower_disp_limit=33,
+            upper_disp_limit=35,
+            lower_alarm_limit=32,
+            upper_alarm_limit=36,
+            lower_warning_limit=31,
+            upper_warning_limit=37,
+            lower_ctrl_limit=30,
+            upper_ctrl_limit=38,
+        ),
+        "str": ca.ChannelString(
+            value="hello",
+            alarm=str_alarm_status,
+            reported_record_type="caproto"
+        ),
     }
 
     # tack on a unique prefix
@@ -748,6 +697,9 @@ def trio_runner(pvdb, client, *, threaded_client=False):
     async def run_server_and_client():
         async with trio.open_nursery() as test_nursery:
             server_context = await test_nursery.start(trio_server_main)
+            if server_context is None:
+                raise RuntimeError("Failed to start server")
+
             # Give this a couple tries, akin to poll_readiness.
             for _ in range(15):
                 try:
@@ -759,6 +711,7 @@ def trio_runner(pvdb, client, *, threaded_client=False):
                     continue
                 else:
                     break
+
             server_context.stop()
             # don't leave the server running:
             test_nursery.cancel_scope.cancel()
