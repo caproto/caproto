@@ -90,7 +90,13 @@ def _run_repeater(server_sock, bind_addr):
 
     logger.info("Repeater is listening on %s:%d", bind_host, bind_port)
     while True:
-        msg, addr = server_sock.recvfrom(MAX_UDP_RECV)
+        try:
+            msg, addr = server_sock.recvfrom(MAX_UDP_RECV)
+        except ConnectionResetError as ex:
+            logger.debug("Repeater ConnectionResetError during recvfrom: %s", ex)
+            time.sleep(0.1)
+            continue
+
         host, port = addr
 
         if port in clients and clients[port] != host:
