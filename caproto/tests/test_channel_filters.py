@@ -36,14 +36,8 @@ def context(request):
                           ('{"arr": {"s": 2, "e": 3}}', [2, 3]),
                           ('{"arr": {"s": 2, "e": 6, "i": 2}}', [2, 5, 13])
                           ])
-def test_array_filter(request, prefix, context, filter, expected):
-    pv_name = f'{prefix}fib'
-    run_example_ioc(
-        'caproto.ioc_examples.advanced.type_varieties',
-        request=request,
-        args=['--prefix', prefix],
-        pv_to_check=pv_name
-    )
+def test_array_filter(request, prefix, context, filter, expected, type_varieties_ioc):
+    pv_name = type_varieties_ioc.pvs["fib"]
 
     pv, = context.get_pvs(pv_name + '.' + filter)
     pv.wait_for_connection()
@@ -52,6 +46,7 @@ def test_array_filter(request, prefix, context, filter, expected):
     def cb(sub, reading):
         assert list(reading.data) == expected
         event.set()
+
     # Test read.
     reading = pv.read()
     cb(None, reading)
@@ -63,14 +58,8 @@ def test_array_filter(request, prefix, context, filter, expected):
     event.wait(timeout=2)
 
 
-def test_ts_filter(request, prefix, context):
-    pv_name = f'{prefix}fib'
-    run_example_ioc(
-        'caproto.ioc_examples.advanced.type_varieties',
-        request=request,
-        args=['--prefix', prefix],
-        pv_to_check=pv_name
-    )
+def test_ts_filter(request, prefix, context, type_varieties_ioc):
+    pv_name = type_varieties_ioc.pvs["fib"]
 
     # Access one element.
     pv, = context.get_pvs(pv_name)
@@ -170,14 +159,14 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
                           ('{"dbnd": {"abs": 1}}', [3.14]),
                           # TODO Cover more interesting cases.
                           ])
-def test_dbnd_filter(request, caproto_ioc, context, filter, expected):
+def test_dbnd_filter(request, type_varieties_ioc, context, filter, expected):
 
     responses = []
 
     def cache(_, response):
         responses.append(response)
 
-    pv, = context.get_pvs(caproto_ioc.pvs['float'] + '.' + filter)
+    pv, = context.get_pvs(type_varieties_ioc.pvs['float'] + '.' + filter)
     pv.wait_for_connection()
 
     sub = pv.subscribe()

@@ -412,7 +412,7 @@ def prefix():
     return new_prefix()
 
 
-def _epics_base_ioc(prefix, request):
+def _run_epics_base_ioc(prefix, request):
     if not ca.benchmarking.has_softioc():
         pytest.skip('no softIoc')
     name = 'Waveform and standard record IOC'
@@ -478,7 +478,7 @@ def _epics_base_ioc(prefix, request):
                            type='epics-base')
 
 
-def _caproto_ioc(prefix, request):
+def _run_type_varieties_ioc(prefix, request):
     name = 'Caproto type varieties example'
     pvs = dict(int=prefix + 'int',
                int2=prefix + 'int2',
@@ -492,6 +492,7 @@ def _caproto_ioc(prefix, request):
                empty_bytes=prefix + 'empty_bytes',
                empty_char=prefix + 'empty_char',
                empty_float=prefix + 'empty_float',
+               fib=prefix + 'fib',
                )
     process = run_example_ioc(
         'caproto.ioc_examples.advanced.type_varieties',
@@ -503,8 +504,8 @@ def _caproto_ioc(prefix, request):
                            type='caproto')
 
 
-caproto_ioc = pytest.fixture(scope='function')(_caproto_ioc)
-epics_base_ioc = pytest.fixture(scope='function')(_epics_base_ioc)
+type_varieties_ioc = pytest.fixture(scope='function')(_run_type_varieties_ioc)
+epics_base_ioc = pytest.fixture(scope='function')(_run_epics_base_ioc)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -512,9 +513,9 @@ def ioc_factory(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        return functools.partial(_caproto_ioc, prefix, request)
+        return functools.partial(_run_type_varieties_ioc, prefix, request)
     elif request.param == 'epics-base':
-        return functools.partial(_epics_base_ioc, prefix, request)
+        return functools.partial(_run_epics_base_ioc, prefix, request)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -522,11 +523,9 @@ def ioc(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        ioc_ = _caproto_ioc(prefix, request)
-    elif request.param == 'epics-base':
-        ioc_ = _epics_base_ioc(prefix, request)
-
-    return ioc_
+        return _run_type_varieties_ioc(prefix, request)
+    if request.param == 'epics-base':
+        return _run_epics_base_ioc(prefix, request)
 
 
 def start_repeater():

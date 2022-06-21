@@ -262,8 +262,8 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
     print('done')
 
 
-def test_limits_enforced(request, caproto_ioc):
-    pv = caproto_ioc.pvs['float']
+def test_limits_enforced(request, type_varieties_ioc):
+    pv = type_varieties_ioc.pvs['float']
     write(pv, 3.101, notify=True)  # within limit
     write(pv, 3.179, notify=True)  # within limit
     with pytest.raises(ErrorResponseReceived):
@@ -272,20 +272,20 @@ def test_limits_enforced(request, caproto_ioc):
         write(pv, 3.181, notify=True)  # beyond limit
 
 
-def test_empties_with_caproto_client(request, caproto_ioc):
-    assert read(caproto_ioc.pvs['empty_string']).data == [b'']
-    assert list(read(caproto_ioc.pvs['empty_bytes']).data) == []
-    assert list(read(caproto_ioc.pvs['empty_char']).data) == []
-    assert list(read(caproto_ioc.pvs['empty_float']).data) == []
+def test_empties_with_caproto_client(request, type_varieties_ioc):
+    assert read(type_varieties_ioc.pvs['empty_string']).data == [b'']
+    assert list(read(type_varieties_ioc.pvs['empty_bytes']).data) == []
+    assert list(read(type_varieties_ioc.pvs['empty_char']).data) == []
+    assert list(read(type_varieties_ioc.pvs['empty_float']).data) == []
 
 
 @pytest.mark.skipif(not has_caget(), reason='No caget binary')
-def test_empties_with_caget(request, caproto_ioc):
+def test_empties_with_caget(request, type_varieties_ioc):
     async def test():
-        info = await run_caget('asyncio', caproto_ioc.pvs['empty_string'])
+        info = await run_caget('asyncio', type_varieties_ioc.pvs['empty_string'])
         assert info['value'] == ''
 
-        info = await run_caget('asyncio', caproto_ioc.pvs['empty_bytes'])
+        info = await run_caget('asyncio', type_varieties_ioc.pvs['empty_bytes'])
         # NOTE: this zero is not a value, it's actually the length:
         # $ caget  type_varieties:empty_bytes
         # type_varieties:empty_bytes     0
@@ -295,20 +295,20 @@ def test_empties_with_caget(request, caproto_ioc):
         # type_varieties:empty_bytes     1 0
         assert info['value'] == '0'
 
-        info = await run_caget('asyncio', caproto_ioc.pvs['empty_char'])
+        info = await run_caget('asyncio', type_varieties_ioc.pvs['empty_char'])
         assert info['value'] == '0'
 
-        info = await run_caget('asyncio', caproto_ioc.pvs['empty_float'])
+        info = await run_caget('asyncio', type_varieties_ioc.pvs['empty_float'])
         # NOTE: 2 below is length, with 2 elements of 0
         assert info['value'] == ['2', '0', '0']
         # TODO: somehow caget gets the max_length instead of the current
         # length.  caproto-get does not have this issue.
 
-    asyncio.get_event_loop().run_until_complete(test())
+    asyncio.run(test())
 
 
-def test_char_write(request, caproto_ioc):
-    pv = caproto_ioc.pvs['chararray']
+def test_char_write(request, type_varieties_ioc):
+    pv = type_varieties_ioc.pvs['chararray']
     write(pv, b'testtesttest', notify=True)
     response = read(pv)
     assert ''.join(chr(c) for c in response.data) == 'testtesttest'
