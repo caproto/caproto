@@ -718,10 +718,13 @@ def server(request):
 
         import caproto.curio
 
+        async def curio_startup_hook(async_lib):
+            await curio_event.set()
+
         async def server_main():
             try:
                 ctx = caproto.curio.server.Context(pvdb)
-                await ctx.run()
+                await ctx.run(startup_hook=curio_startup_hook)
             except caproto.curio.server.ServerExit:
                 logger.info('Server exited normally')
             except Exception as ex:
@@ -731,6 +734,7 @@ def server(request):
         async def run_server_and_client():
             try:
                 server_task = await curio.spawn(server_main)
+                await curio_event.wait()
                 # Give this a couple tries, akin to poll_readiness.
                 for _ in range(15):
                     try:
@@ -748,6 +752,7 @@ def server(request):
                 await server_task.cancel()
 
         with curio.Kernel() as kernel:
+            curio_event = curio.Event()
             kernel.run(run_server_and_client)
 
     def trio_runner(pvdb, client, *, threaded_client=False):
@@ -758,10 +763,12 @@ def server(request):
         import caproto.trio
 
         async def trio_server_main(task_status):
+            async def trio_server_startup(async_lib):
+                task_status.started(ctx)
+
             try:
                 ctx = caproto.trio.server.Context(pvdb)
-                task_status.started(ctx)
-                await ctx.run()
+                await ctx.run(startup_hook=trio_server_startup)
             except Exception as ex:
                 logger.error('Server failed: %s %s', type(ex), ex)
                 raise
