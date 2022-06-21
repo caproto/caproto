@@ -1095,6 +1095,13 @@ class Context:
             while True:
                 try:
                     await circuit.recv()
+                except Exception:
+                    self.log.exception(
+                        "Client disconnected in unexpected way"
+                    )
+                    await circuit._on_disconnect()
+                    await self.circuit_disconnected(circuit)
+                    break
                 except DisconnectedCircuit:
                     await self.circuit_disconnected(circuit)
                     break

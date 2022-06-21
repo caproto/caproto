@@ -143,6 +143,7 @@ def test_catvs(catvs_ioc_runner: Callable, test_class: type, test_name: str):
         port = ctx.ca_server_port if "udp" in test_name.lower() else ctx.port
         hacked_setup(test_inst, port)
         test_func = getattr(test_inst, test_name)
+        print(f"Running {test_func.__name__}")
         test_func()
 
     catvs_ioc_runner(client_test, threaded_client=True)
