@@ -49,12 +49,12 @@ def test_array_filter(request, prefix, context, filter, expected):
     pv.wait_for_connection()
     event = threading.Event()
 
-    def cb(reading):
+    def cb(sub, reading):
         assert list(reading.data) == expected
         event.set()
     # Test read.
     reading = pv.read()
-    cb(reading)
+    cb(None, reading)
     # Test subscribe.
     sub = pv.subscribe()
     event.clear()
@@ -85,12 +85,12 @@ def test_ts_filter(request, prefix, context):
 
     event = threading.Event()
 
-    def cb(reading):
+    def cb(_, reading):
         assert reading.metadata.timestamp != proc_time
         event.set()
     # Test read.
     reading = ts_pv.read(data_type='time')
-    cb(reading)
+    cb(None, reading)
     # Test subscribe.
     sub = pv.subscribe(data_type='time')
     event.clear()
@@ -121,7 +121,7 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
                     pv_to_check=value_name)
     responses = []
 
-    def cache(response):
+    def cache(_, response):
         print('* response:', response.data)
         responses.append(response)
 
@@ -174,7 +174,7 @@ def test_dbnd_filter(request, caproto_ioc, context, filter, expected):
 
     responses = []
 
-    def cache(response):
+    def cache(_, response):
         responses.append(response)
 
     pv, = context.get_pvs(caproto_ioc.pvs['float'] + '.' + filter)
