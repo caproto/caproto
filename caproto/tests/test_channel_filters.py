@@ -4,7 +4,6 @@ import time
 import pytest
 
 from ..threading.client import Context
-from .conftest import run_example_ioc
 
 
 @pytest.fixture(scope='function')
@@ -106,13 +105,7 @@ MANY = object()
                           ('{"while": "my_stately_state"}', 1, MANY, 1),
                           ('{"unless": "my_stately_state"}', MANY, 1, MANY),
                           ])
-def test_sync_filter(request, prefix, context, filter, initial, on, off):
-    value_name = f'{prefix}value'
-    enable_state_name = f'{prefix}enable_state'
-    disable_state_name = f'{prefix}disable_state'
-    run_example_ioc('caproto.ioc_examples.states', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=value_name)
+def test_sync_filter(request, prefix, context, filter, initial, on, off, states_ioc):
     responses = []
 
     def cache(_, response):
@@ -127,7 +120,10 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
                 'Expected an exact number of responses'
 
     value, disable_state, enable_state = context.get_pvs(
-        value_name + '.' + filter, disable_state_name, enable_state_name)
+        states_ioc.pvs["value"] + "." + filter,
+        states_ioc.pvs["disable_state"],
+        states_ioc.pvs["enable_state"],
+    )
 
     for pv in (value, disable_state, enable_state):
         pv.wait_for_connection()

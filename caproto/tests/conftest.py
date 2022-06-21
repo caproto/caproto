@@ -504,7 +504,42 @@ def _run_type_varieties_ioc(prefix, request):
                            type='caproto')
 
 
+def _run_states_ioc(prefix, request):
+    name = 'Caproto states IOC example'
+    pvs = dict(
+        (pv, f"{prefix}{pv}")
+        for pv in (
+            "value", "enable_state", "disable_state"
+        )
+    )
+    process = run_example_ioc(
+        "caproto.ioc_examples.states",
+        request=request,
+        pv_to_check=pvs["value"],
+        args=("--prefix", prefix),
+    )
+    return SimpleNamespace(
+        process=process, prefix=prefix, name=name, pvs=pvs, type="caproto"
+    )
+
+
+def _run_records_ioc(prefix, request):
+    name = 'Caproto records IOC example'
+    pvs = dict((pv, f"{prefix}{pv}") for pv in "ABCDE")
+    process = run_example_ioc(
+        "caproto.ioc_examples.records",
+        request=request,
+        pv_to_check=pvs["C"],
+        args=("--prefix", prefix),
+    )
+    return SimpleNamespace(
+        process=process, prefix=prefix, name=name, pvs=pvs, type="caproto"
+    )
+
+
 type_varieties_ioc = pytest.fixture(scope='function')(_run_type_varieties_ioc)
+records_ioc = pytest.fixture(scope='function')(_run_records_ioc)
+states_ioc = pytest.fixture(scope='function')(_run_states_ioc)
 epics_base_ioc = pytest.fixture(scope='function')(_run_epics_base_ioc)
 
 

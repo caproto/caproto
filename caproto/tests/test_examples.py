@@ -99,6 +99,7 @@ def test_areadetector_generate():
     "caproto.ioc_examples.too_clever.caproto_to_ophyd"
 )
 def test_typhos_example(request, ioc_name):
+    pytest.importorskip("ophyd")
     info = conftest.run_example_ioc_by_name(ioc_name, request=request)
     from caproto.ioc_examples.too_clever import caproto_to_typhos
     caproto_to_typhos.pydm = None
