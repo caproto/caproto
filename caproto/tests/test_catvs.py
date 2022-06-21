@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(scope="function", params=["asyncio"])
 def catvs_ioc_runner():
     event = None
+    timeout = 30.0
 
     def asyncio_runner(client: Callable, *, threaded_client: bool = False):
         async def asyncio_startup(async_lib):
@@ -42,25 +43,35 @@ def catvs_ioc_runner():
             finally:
                 os.environ["EPICS_CA_SERVER_PORT"] = orig_port
 
+        async def timeout_handler():
+            loop = asyncio.get_running_loop()
+            await asyncio.sleep(timeout)
+            print("Test timed out!")
+            loop.stop()
+
         async def run_server_and_client():
             nonlocal event
             event = asyncio.Event()
             loop = asyncio.get_running_loop()
             tsk = loop.create_task(asyncio_server_main())
+            timeout_tsk = loop.create_task(timeout_handler())
             # Give this a couple tries, akin to poll_readiness.
             await event.wait()
-            for _ in range(5):
-                try:
-                    if threaded_client:
-                        await loop.run_in_executor(None, client)
+            try:
+                for _ in range(5):
+                    try:
+                        if threaded_client:
+                            await loop.run_in_executor(None, client)
+                        else:
+                            await client()
+                    except TimeoutError:
+                        continue
                     else:
-                        await client()
-                except TimeoutError:
-                    continue
-                else:
-                    break
-            tsk.cancel()
-            await asyncio.wait((tsk, ))
+                        break
+                tsk.cancel()
+                await asyncio.wait((tsk, ))
+            finally:
+                timeout_tsk.cancel()
 
         asyncio.run(run_server_and_client())
 

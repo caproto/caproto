@@ -283,3 +283,15 @@ def test_server_addresses(monkeypatch, protocol, env_addr, expected):
 
     patch_env(monkeypatch, env)
     assert set(ca.get_server_address_list(protocol=protocol)) == set(expected)
+
+
+def test_timeout_fixture():
+    import asyncio
+
+    from . import conftest
+
+    async def client():
+        await asyncio.sleep(100)
+
+    with pytest.raises(RuntimeError):
+        conftest.asyncio_runner({}, client, timeout=2.0)
