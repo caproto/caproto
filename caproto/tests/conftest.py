@@ -1,4 +1,5 @@
 import array
+import asyncio
 import functools
 import logging
 import os
@@ -786,12 +787,13 @@ def server(request):
         trio.run(run_server_and_client)
 
     def asyncio_runner(pvdb, client, *, threaded_client=False):
-        import asyncio
+        async def asyncio_startup_hook(async_lib):
+            event.set()
 
         async def asyncio_server_main():
             try:
                 ctx = caproto.asyncio.server.Context(pvdb)
-                await ctx.run()
+                await ctx.run(startup_hook=asyncio_startup_hook)
             except Exception as ex:
                 logger.error('Server failed: %s %s', type(ex), ex)
                 raise
@@ -799,6 +801,7 @@ def server(request):
         async def run_server_and_client(loop):
             tsk = loop.create_task(asyncio_server_main())
             # Give this a couple tries, akin to poll_readiness.
+            await event.wait()
             for _ in range(15):
                 try:
                     if threaded_client:
@@ -814,6 +817,7 @@ def server(request):
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        event = asyncio.Event()
         loop.run_until_complete(run_server_and_client(loop))
 
     if request.param == 'curio':
