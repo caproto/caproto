@@ -38,12 +38,21 @@ class VirtualCircuit(_VirtualCircuit):
     "Wraps a caproto.VirtualCircuit with an asyncio client."
     TaskCancelled = asyncio.CancelledError
 
-    def __init__(self, circuit, client, context, *, loop=None):
+    client: _TransportWrapper
+    context: "Context"
+
+    def __init__(
+        self,
+        circuit: _VirtualCircuit,
+        client: _TransportWrapper,
+        context: "Context",
+        *,
+        loop=None
+    ):
         if loop is not None:
             warnings.warn("The loop kwarg will be removed in the future", stacklevel=2)
 
         super().__init__(circuit, client, context)
-        self._send_lock = asyncio.Lock()
         self.QueueFull = asyncio.QueueFull
         self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = asyncio.Condition()
@@ -64,8 +73,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     async def _send_buffers(self, *buffers):
         """Send ``buffers`` over the wire."""
-        async with self._send_lock:
-            await self.client.send(b"".join(buffers))
+        await self.client.send(b"".join(buffers))
 
     async def run(self):
         self.tasks.create(self.command_queue_loop())

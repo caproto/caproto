@@ -67,21 +67,20 @@ class _TransportWrapper:
 
     Parameters
     ----------
-    reader : ??
+    reader : asyncio.StreamReader
 
-    writer : ??
-
-    loop : asyncio.AbstractEventLoop, optional
-        The event loop.
+    writer : asyncio.StreamWriter
     """
 
     loop: asyncio.AbstractEventLoop
+    reader: asyncio.StreamReader
+    writer: asyncio.StreamWriter
     transport: asyncio.BaseTransport
 
-    def __init__(self, reader, writer, loop=None):
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         self.reader = reader
         self.writer = writer
-        self.lock = asyncio.Lock()
+        self.send_lock = asyncio.Lock()
 
     def getsockname(self):
         return self.writer.get_extra_info('sockname')
@@ -92,7 +91,7 @@ class _TransportWrapper:
     async def send(self, bytes_to_send):
         """Sends data over a connected socket."""
         try:
-            async with self.lock:
+            async with self.send_lock:
                 self.writer.write(bytes_to_send)
                 await self.writer.drain()
         except OSError as exc:

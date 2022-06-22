@@ -98,6 +98,8 @@ host_endian = ('>' if sys.byteorder == 'big' else '<')
 
 
 class VirtualCircuit:
+    circuit: ca.VirtualCircuit
+
     def __init__(self, circuit, client, context):
         self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
