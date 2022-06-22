@@ -386,7 +386,7 @@ class ChannelData:
             'string_encoding': self.string_encoding,
             'reported_record_type': self.reported_record_type,
             'max_length': self._max_length,
-            **self._data
+            **copy.deepcopy(self._data)
         }
         return ((), kwargs)
 

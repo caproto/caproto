@@ -96,7 +96,7 @@ MANY = object()
 
 
 # TO DO --- These really should not be flaky!
-# @pytest.mark.xfail
+@pytest.mark.xfail
 @pytest.mark.parametrize('filter, initial, on, off',
                          [('{"before": "my_stately_state"}', 1, 1, 1),
                           ('{"after": "my_stately_state"}', 1, 1, 1),

@@ -9,6 +9,7 @@ For an example server implementation, see caproto.curio.server
 import argparse
 import copy
 import enum
+import functools
 import inspect
 import logging
 import sys
@@ -1676,25 +1677,7 @@ class PVGroup(metaclass=PVGroupMeta):
             else:
                 self.states = {}
 
-        pv_group = self
-
-        class StateUpdateContext:
-            def __init__(self, state, value):
-                self.pv_group = pv_group
-                self.state = state
-                self.value = value
-
-            async def __aenter__(self):
-                for attr in pv_group.attr_pvdb.values():
-                    attr.pre_state_change(self.state, self.value)
-                pv_group.states[self.state] = self.value
-                return self
-
-            async def __aexit__(self, exc_type, exc_value, traceback):
-                for attr in pv_group.attr_pvdb.values():
-                    attr.post_state_change(self.state, self.value)
-
-        self.update_state = StateUpdateContext
+        self.update_state = functools.partial(_StateUpdateContext, self)
 
         # Create logger name from parent or from module class
         self.name = (self.__class__.__name__
@@ -1715,9 +1698,9 @@ class PVGroup(metaclass=PVGroupMeta):
 
         # Prime the snapshots to the current state.
         for key, val in self.states.items():
-            for attr in pv_group.attr_pvdb.values():
-                attr.pre_state_change(key, val)
-                attr.post_state_change(key, val)
+            for prop in self.attr_pvdb.values():
+                prop.pre_state_change(key, val)
+                prop.post_state_change(key, val)
 
     def _create_pvdb(self):
         'Create the PV database for all subgroups and pvproperties'
@@ -1780,6 +1763,23 @@ class PVGroup(metaclass=PVGroupMeta):
         'Generic write called for channels without `put` defined'
         self.log.debug('group_write: %s = %s', instance.pvspec.attr, value)
         return value
+
+
+class _StateUpdateContext:
+    def __init__(self, pv_group: PVGroup, state, value):
+        self.pv_group = pv_group
+        self.state = state
+        self.value = value
+
+    async def __aenter__(self):
+        for prop in self.pv_group.attr_pvdb.values():
+            prop.pre_state_change(self.state, self.value)
+        self.pv_group.states[self.state] = self.value
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        for prop in self.pv_group.attr_pvdb.values():
+            prop.post_state_change(self.state, self.value)
 
 
 def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
