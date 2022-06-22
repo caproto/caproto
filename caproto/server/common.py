@@ -143,16 +143,18 @@ class VirtualCircuit:
                 await sub_spec.db_entry.unsubscribe(queue, sub_spec)
         self.subscriptions.clear()
 
+    async def _send_buffers(self, *commands):
+        """To be implemented in a subclass"""
+        raise NotImplementedError()
+
     async def send(self, *commands):
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            # send bytes over the wire using some caproto utilities
             try:
-                bytes_to_send = b"".join(buffers_to_send)
-                await self.client.sendall(bytes_to_send)
+                await self._send_buffers(*buffers_to_send)
             except (OSError, CaprotoNetworkError) as ex:
                 raise DisconnectedCircuit(
                     f"Circuit disconnected: {ex}"

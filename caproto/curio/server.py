@@ -71,7 +71,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
-        self._raw_lock = curio.Lock()
+        self._send_lock = curio.Lock()
         self.QueueFull = QueueFull
         self.command_queue = QueueWithFullError(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = curio.Condition()
@@ -80,6 +80,11 @@ class VirtualCircuit(_VirtualCircuit):
         self.subscription_queue = QueueWithFullError(
             ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
         self.write_event = Event()
+
+    async def _send_buffers(self, *buffers):
+        """Send ``buffers`` over the wire."""
+        async with self._send_lock:
+            await self.client.send(b"".join(buffers))
 
     async def run(self):
         await self.pending_tasks.spawn(self.command_queue_loop())

@@ -4,10 +4,8 @@ import warnings
 
 import caproto as ca
 
-from .._utils import CaprotoNetworkError
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
-from ..server.common import DisconnectedCircuit
 from ..server.common import VirtualCircuit as _VirtualCircuit
 from .utils import (AsyncioQueue, _create_bound_tcp_socket, _create_udp_socket,
                     _DatagramProtocol, _TaskHandler, _TransportWrapper,
@@ -45,6 +43,7 @@ class VirtualCircuit(_VirtualCircuit):
             warnings.warn("The loop kwarg will be removed in the future", stacklevel=2)
 
         super().__init__(circuit, client, context)
+        self._send_lock = asyncio.Lock()
         self.QueueFull = asyncio.QueueFull
         self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = asyncio.Condition()
@@ -63,15 +62,10 @@ class VirtualCircuit(_VirtualCircuit):
         except asyncio.TimeoutError:
             return None
 
-    async def send(self, *commands):
-        if self.connected:
-            buffers_to_send = self.circuit.send(*commands)
-            try:
-                await self.client.send(b''.join(buffers_to_send))
-            except CaprotoNetworkError as ex:
-                raise DisconnectedCircuit(
-                    f"Circuit disconnected: {ex}"
-                ) from ex
+    async def _send_buffers(self, *buffers):
+        """Send ``buffers`` over the wire."""
+        async with self._send_lock:
+            await self.client.send(b"".join(buffers))
 
     async def run(self):
         self.tasks.create(self.command_queue_loop())

@@ -89,11 +89,40 @@ class TrioAsyncLayer(AsyncLibraryLayer):
     sleep = staticmethod(trio.sleep)
 
 
+class TrioSocketStreamCompat:
+    _sock: socket.socket  # trio._socket._SocketType
+    _stream: trio.SocketStream
+    _token: trio.lowlevel.TrioToken
+    _send_lock: trio.StrictFIFOLock
+
+    def __init__(self, sock: socket.socket, token: trio.lowlevel.TrioToken):
+        self._sock = sock
+        self._stream = trio.SocketStream(sock)
+        self._token = token
+        self._send_lock = trio.StrictFIFOLock()
+
+    async def recv(self, max_bytes=None):
+        return await self._stream.receive_some(max_bytes)
+
+    def close(self, *args, **kwargs):
+        def _close():
+            trio.from_thread.run(self._stream.aclose, trio_token=self._token)
+
+        threading.Thread(target=_close, daemon=True).start()
+
+    def getsockname(self, *args, **kwargs):
+        return self._sock.getsockname()
+
+    async def send_all(self, data):
+        async with self._send_lock:
+            return await self._stream.send_all(data)
+
+
 class VirtualCircuit(_VirtualCircuit):
     "Wraps a caproto.VirtualCircuit with a trio client."
     TaskCancelled = trio.Cancelled
 
-    def __init__(self, circuit, client, context):
+    def __init__(self, circuit, client: TrioSocketStreamCompat, context):
         super().__init__(circuit, client, context)
         self.nursery = context.nursery
         self.QueueFull = trio.WouldBlock
@@ -115,6 +144,10 @@ class VirtualCircuit(_VirtualCircuit):
     async def run(self):
         await self.nursery.start(self.command_queue_loop)
         await self.nursery.start(self.subscription_queue_loop)
+
+    async def _send_buffers(self, *buffers):
+        """Send ``buffers`` over the wire."""
+        await self.client.send_all(b"".join(buffers))
 
     async def command_queue_loop(self, task_status):
         self.write_event.set()
@@ -163,35 +196,6 @@ class VirtualCircuit(_VirtualCircuit):
     async def _wake_new_command(self):
         async with self.new_command_condition:
             self.new_command_condition.notify_all()
-
-
-class TrioSocketStreamCompat:
-    _sock: socket.socket  # trio._socket._SocketType
-    _stream: trio.SocketStream
-    _token: trio.lowlevel.TrioToken
-    _raw_lock: trio.StrictFIFOLock
-
-    def __init__(self, sock: socket.socket, token: trio.lowlevel.TrioToken):
-        self._sock = sock
-        self._stream = trio.SocketStream(sock)
-        self._token = token
-        self._raw_lock = trio.StrictFIFOLock()
-
-    async def recv(self, max_bytes=None):
-        return await self._stream.receive_some(max_bytes)
-
-    def close(self, *args, **kwargs):
-        def _close():
-            trio.from_thread.run(self._stream.aclose, trio_token=self._token)
-
-        threading.Thread(target=_close, daemon=True).start()
-
-    def getsockname(self, *args, **kwargs):
-        return self._sock.getsockname()
-
-    async def sendall(self, data):
-        async with self._raw_lock:
-            return await self._stream.send_all(data)
 
 
 class Context(_Context):
