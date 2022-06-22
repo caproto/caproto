@@ -161,21 +161,21 @@ class SharedBroadcaster:
     async def _create_socket(self):
         self.udp_sock = ca.bcast_socket(socket_module=socket)
 
-        loop = get_running_loop()
         # Must bind or getsocketname() will raise on Windows.
         # See https://github.com/caproto/caproto/issues/514.
         self.udp_sock.bind(('', 0))
+        await self._create_transport()
 
+    async def _create_transport(self):
+        """Create the _UdpTransportWrapper for the UDP socket"""
+        loop = get_running_loop()
         transport, self.protocol = await loop.create_datagram_endpoint(
             functools.partial(_DatagramProtocol, parent=self,
                               identifier='client-search',
                               queue=self.receive_queue),
             sock=self.udp_sock)
 
-        # TODO: wrapped transport is a server concept for unifying
-        # trio/asyncio/curio
         self.wrapped_transport = _UdpTransportWrapper(transport)
-
         self.broadcaster.client_address = safe_getsockname(self.udp_sock)
 
     async def register(self):
@@ -225,6 +225,7 @@ class SharedBroadcaster:
                     "Broadcaster received ConnectionResetError",
                     exc_info=bytes_received
                 )
+                await self._create_transport()
                 continue
             if isinstance(bytes_received, Exception):
                 self.log.exception('Broadcaster receive exception',
