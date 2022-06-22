@@ -951,6 +951,7 @@ class VirtualCircuitManager:
         self._ioid_counter = ThreadsafeCounter()
         self._ready = asyncio.Event()
         self._send_on_connection = []
+        self._send_lock = asyncio.Lock()
         self._subscriptionid_counter = ThreadsafeCounter()
         self.command_queue = AsyncioQueue()
         self.dead = asyncio.Event()
@@ -1076,12 +1077,11 @@ class VirtualCircuitManager:
         # Turn the crank: inform the VirtualCircuit that these commands will be
         # send, and convert them to buffers.
         buffers_to_send = self.circuit.send(*commands, extra=extra)
-        # TODO: can we trust asyncio to get this all out the door 😱
-        # and not use our blocking wrapper?
-        for buff in buffers_to_send:
-            self.transport.writer.write(bytes(buff))
+        async with self._send_lock:
+            for buff in buffers_to_send:
+                self.transport.writer.write(bytes(buff))
 
-        await self.transport.writer.drain()
+            await self.transport.writer.drain()
 
     async def events_off(self):
         """
