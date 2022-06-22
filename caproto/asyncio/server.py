@@ -261,8 +261,7 @@ async def start_server(pvdb, *, interfaces=None, log_pv_names=False,
                        startup_hook=None):
     '''Start an asyncio server with a given PV database'''
     ctx = Context(pvdb, interfaces)
-    ret = await ctx.run(log_pv_names=log_pv_names, startup_hook=startup_hook)
-    return ret
+    return await ctx.run(log_pv_names=log_pv_names, startup_hook=startup_hook)
 
 
 def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
@@ -285,14 +284,14 @@ def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
     startup_hook : coroutine, optional
         Hook to call at startup with the ``async_lib`` shim.
     """
-    loop = asyncio.get_event_loop()
-    task = loop.create_task(
-        start_server(pvdb, interfaces=interfaces, log_pv_names=log_pv_names,
-                     startup_hook=startup_hook))
     try:
-        loop.run_until_complete(task)
+        asyncio.run(
+            start_server(
+                pvdb,
+                interfaces=interfaces,
+                log_pv_names=log_pv_names,
+                startup_hook=startup_hook,
+            )
+        )
     except KeyboardInterrupt:
         ...
-    finally:
-        task.cancel()
-        loop.run_until_complete(task)
