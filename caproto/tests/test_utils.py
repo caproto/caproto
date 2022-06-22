@@ -54,27 +54,6 @@ _incr_sends = [
 ]
 
 
-@pytest.mark.parametrize('buffers, offset, expected', _incr_sends)
-def test_buffer_list_slice(buffers, offset, expected):
-    assert ca.buffer_list_slice(*buffers, offset=offset) == expected
-
-
-@pytest.mark.parametrize('buffers, offset, expected', _incr_sends)
-def test_incremental_send(buffers, offset, expected):
-    full_bytes = b''.join(bytes(b) for b in buffers)
-
-    gen = ca.incremental_buffer_list_slice(*buffers)
-    gen.send(None)
-
-    for i in range(len(full_bytes)):
-        try:
-            buffers = gen.send(1)
-        except StopIteration:
-            assert i == (len(full_bytes) - 1), 'StopIteration unexpected'
-            break
-        assert full_bytes[i + 1:] == b''.join(bytes(b) for b in buffers)
-
-
 records_to_check = [
     ['x.NAME', ('x.NAME', 'x', 'NAME', None)],
     ['x.', ('x', 'x', None, None)],

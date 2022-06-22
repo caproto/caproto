@@ -55,7 +55,6 @@ __all__ = (  # noqa F822
     'ensure_bytes',
     'random_ports',
     'bcast_socket',
-    'buffer_list_slice',
     'parse_record_field',
     'parse_channel_filter',
     'batch_requests',
@@ -631,26 +630,6 @@ if 'pypy' in sys.implementation.name:
 else:
     def _cast_buffers_to_byte(buffers):
         return tuple(memoryview(b).cast('b') for b in buffers)
-
-
-def buffer_list_slice(*buffers, offset):
-    'Helper function for slicing a list of buffers'
-    if offset < 0:
-        raise CaprotoValueError('Negative offset')
-
-    buffers = _cast_buffers_to_byte(buffers)
-
-    start = 0
-    for bufidx, buf in enumerate(buffers):
-        end = start + len(buf)
-        if offset < end:
-            offset -= start
-            return (buf[offset:], ) + buffers[bufidx + 1:]
-
-        start = end
-
-    raise CaprotoValueError('Offset beyond end of buffers '
-                            '(total length={} offset={})'.format(end, offset))
 
 
 RecordAndField = namedtuple('RecordAndField',
