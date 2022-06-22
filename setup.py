@@ -79,7 +79,7 @@ setup(name='caproto',
           # rebuild record fields:
           '': ['*.rst', '*.jinja2'],
       },
-      python_requires='>=3.7',
+      python_requires='>=3.8',
       classifiers=classifiers,
       extras_require=extras_require
       )
