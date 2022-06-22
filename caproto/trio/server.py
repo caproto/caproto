@@ -114,8 +114,11 @@ class TrioSocketStreamCompat:
         return self._sock.getsockname()
 
     async def send_all(self, data):
-        async with self._send_lock:
-            return await self._stream.send_all(data)
+        try:
+            async with self._send_lock:
+                return await self._stream.send_all(data)
+        except trio.BrokenResourceError:
+            raise DisconnectedCircuit("Disconnected while sending to client")
 
 
 class VirtualCircuit(_VirtualCircuit):
