@@ -7,8 +7,6 @@ jobs:
     vmImage: 'ubuntu-18.04'
   strategy:
     matrix:
-      Python 3.7:
-        python.version: '3.7'
       Python 3.8:
         python.version: '3.8'
       Python 3.9:
