@@ -25,7 +25,11 @@ Fixed
   an ICMP Port Unreachable message."  This is not fatal in caproto's case and
   can safely be ignored (or worked around, in the case of asyncio).
   https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
-  - Fixed pickle/copy for ChannelData subclasses
+- Fixed pickle/copy for ChannelData subclasses
+- Fixed synchronous repeater bind address to INADDR_ANY ("0.0.0.0").  Binding
+  to a specific interface meant that on Windows the repeater could not use
+  its client-is-alive detection mechanism by binding to the client port as
+  the bind would always succeed.
 
 Development
 -----------
