@@ -14,7 +14,7 @@ def curio_run(*args, selector=None, **kwargs):
     See note here: https://github.com/dabeaz/curio/issues/75
     """
     if sys.platform != "win32":
-        return curio.run
+        return curio.run(*args, selector=selector, **kwargs)
 
     if selector is None:
         dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
