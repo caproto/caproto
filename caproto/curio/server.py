@@ -10,13 +10,11 @@ from .._utils import safe_getsockname
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
+from .utils import curio_run
 
-if hasattr(curio, 'KernelExit'):
-    class ServerExit(curio.KernelExit):
-        ...
-else:
-    class ServerExit(SystemExit):
-        ...
+
+class ServerExit(SystemExit):
+    ...
 
 
 class Event(curio.Event):
@@ -269,13 +267,14 @@ def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
         Hook to call at startup with the ``async_lib`` shim.
     """
     try:
-        return curio.run(
+        return curio_run(
             functools.partial(
                 start_server,
                 pvdb,
                 interfaces=interfaces,
                 log_pv_names=log_pv_names,
                 startup_hook=startup_hook,
-            ))
+            )
+        )
     except KeyboardInterrupt:
         return
