@@ -258,18 +258,6 @@ def _create_udp_socket():
     return sock
 
 
-if sys.version_info < (3, 7):
-    # python <= 3.6 compatibility
-    def get_running_loop():
-        return asyncio.get_event_loop()
-
-    def run(coro, debug=False):
-        return get_running_loop().run_until_complete(coro)
-
-    def create_task(coro):
-        return get_running_loop().create_task(coro)
-
-else:
-    get_running_loop = asyncio.get_running_loop
-    run = asyncio.run
-    create_task = asyncio.create_task
+get_running_loop = asyncio.get_running_loop
+run = asyncio.run
+create_task = asyncio.create_task
