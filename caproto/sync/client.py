@@ -39,7 +39,7 @@ def send(circuit, command, pv_name=None):
     else:
         tags = None
     buffers_to_send = circuit.send(command, extra=tags)
-    sockets[circuit].sendmsg(buffers_to_send)
+    sockets[circuit].sendall(b"".join(buffers_to_send))
 
 
 def recv(circuit):
@@ -127,12 +127,8 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
                 # message."
                 #
                 # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
-                #
-                # Despite the above, this does not *appear* to be fatal;
-                # sometimes the second try will work.
                 logger.debug('Connection reset, retrying: %s', ex)
                 check_timeout()
-                time.sleep(0.1)
                 continue
             except socket.timeout:
                 check_timeout()

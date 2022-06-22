@@ -1,4 +1,5 @@
 import array
+import asyncio
 import functools
 import logging
 import os
@@ -9,6 +10,7 @@ import threading
 import time
 import uuid
 from types import SimpleNamespace
+from typing import Callable, Dict
 
 import pytest
 
@@ -410,7 +412,7 @@ def prefix():
     return new_prefix()
 
 
-def _epics_base_ioc(prefix, request):
+def _run_epics_base_ioc(prefix, request):
     if not ca.benchmarking.has_softioc():
         pytest.skip('no softIoc')
     name = 'Waveform and standard record IOC'
@@ -476,7 +478,7 @@ def _epics_base_ioc(prefix, request):
                            type='epics-base')
 
 
-def _caproto_ioc(prefix, request):
+def _run_type_varieties_ioc(prefix, request):
     name = 'Caproto type varieties example'
     pvs = dict(int=prefix + 'int',
                int2=prefix + 'int2',
@@ -490,6 +492,7 @@ def _caproto_ioc(prefix, request):
                empty_bytes=prefix + 'empty_bytes',
                empty_char=prefix + 'empty_char',
                empty_float=prefix + 'empty_float',
+               fib=prefix + 'fib',
                )
     process = run_example_ioc(
         'caproto.ioc_examples.advanced.type_varieties',
@@ -501,8 +504,43 @@ def _caproto_ioc(prefix, request):
                            type='caproto')
 
 
-caproto_ioc = pytest.fixture(scope='function')(_caproto_ioc)
-epics_base_ioc = pytest.fixture(scope='function')(_epics_base_ioc)
+def _run_states_ioc(prefix, request):
+    name = 'Caproto states IOC example'
+    pvs = dict(
+        (pv, f"{prefix}{pv}")
+        for pv in (
+            "value", "enable_state", "disable_state"
+        )
+    )
+    process = run_example_ioc(
+        "caproto.ioc_examples.states",
+        request=request,
+        pv_to_check=pvs["value"],
+        args=("--prefix", prefix),
+    )
+    return SimpleNamespace(
+        process=process, prefix=prefix, name=name, pvs=pvs, type="caproto"
+    )
+
+
+def _run_records_ioc(prefix, request):
+    name = 'Caproto records IOC example'
+    pvs = dict((pv, f"{prefix}{pv}") for pv in "ABCDE")
+    process = run_example_ioc(
+        "caproto.ioc_examples.records",
+        request=request,
+        pv_to_check=pvs["C"],
+        args=("--prefix", prefix),
+    )
+    return SimpleNamespace(
+        process=process, prefix=prefix, name=name, pvs=pvs, type="caproto"
+    )
+
+
+type_varieties_ioc = pytest.fixture(scope='function')(_run_type_varieties_ioc)
+records_ioc = pytest.fixture(scope='function')(_run_records_ioc)
+states_ioc = pytest.fixture(scope='function')(_run_states_ioc)
+epics_base_ioc = pytest.fixture(scope='function')(_run_epics_base_ioc)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -510,9 +548,9 @@ def ioc_factory(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        return functools.partial(_caproto_ioc, prefix, request)
+        return functools.partial(_run_type_varieties_ioc, prefix, request)
     elif request.param == 'epics-base':
-        return functools.partial(_epics_base_ioc, prefix, request)
+        return functools.partial(_run_epics_base_ioc, prefix, request)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -520,11 +558,9 @@ def ioc(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        ioc_ = _caproto_ioc(prefix, request)
-    elif request.param == 'epics-base':
-        ioc_ = _epics_base_ioc(prefix, request)
-
-    return ioc_
+        return _run_type_varieties_ioc(prefix, request)
+    if request.param == 'epics-base':
+        return _run_epics_base_ioc(prefix, request)
 
 
 def start_repeater():
@@ -565,209 +601,156 @@ def default_teardown_module(module):
     stop_repeater()
 
 
-@pytest.fixture(scope='function')
-def pvdb_from_server_example():
-    alarm = ca.ChannelAlarm(
-        status=ca.AlarmStatus.READ,
-        severity=ca.AlarmSeverity.MINOR_ALARM,
-        alarm_string='alarm string',
-    )
-
-    pvdb = {
-        'pi': ca.ChannelDouble(value=3.14,
-                               lower_disp_limit=3.13,
-                               upper_disp_limit=3.15,
-                               lower_alarm_limit=3.12,
-                               upper_alarm_limit=3.16,
-                               lower_warning_limit=3.11,
-                               upper_warning_limit=3.17,
-                               lower_ctrl_limit=3.10,
-                               upper_ctrl_limit=3.18,
-                               precision=5,
-                               units='doodles',
-                               alarm=alarm,
-                               ),
-        'enum': ca.ChannelEnum(value='b',
-                               enum_strings=['a', 'b', 'c', 'd'],
-                               ),
-        'enum2': ca.ChannelEnum(value='bb',
-                                enum_strings=['aa', 'bb', 'cc', 'dd'],
-                                ),
-        'int': ca.ChannelInteger(value=96,
-                                 units='doodles',
-                                 ),
-        'char': ca.ChannelByte(value=b'3',
-                               units='poodles',
-                               lower_disp_limit=33,
-                               upper_disp_limit=35,
-                               lower_alarm_limit=32,
-                               upper_alarm_limit=36,
-                               lower_warning_limit=31,
-                               upper_warning_limit=37,
-                               lower_ctrl_limit=30,
-                               upper_ctrl_limit=38,
-                               ),
-        'bytearray': ca.ChannelByte(value=b'1234567890' * 2),
-        'chararray': ca.ChannelChar(value=b'1234567890' * 2),
-        'str': ca.ChannelString(value='hello',
-                                string_encoding='latin-1',
-                                alarm=alarm),
-        'str2': ca.ChannelString(value='hello',
-                                 string_encoding='latin-1',
-                                 alarm=alarm),
-        'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
-                                 string_encoding='latin-1'),
-    }
-
-    return pvdb
-
-
-@pytest.fixture(scope='function')
-def curio_server(prefix):
+@pytest.fixture(scope="function")
+def pvdb_from_server_example(prefix: str) -> Dict[str, ca.ChannelData]:
     str_alarm_status = ca.ChannelAlarm(
         status=ca.AlarmStatus.READ,
         severity=ca.AlarmSeverity.MINOR_ALARM,
-        alarm_string='alarm string',
+        alarm_string="alarm string",
     )
 
     caget_pvdb = {
-        'pi': ca.ChannelDouble(value=3.14,
-                               lower_disp_limit=3.13,
-                               upper_disp_limit=3.15,
-                               lower_alarm_limit=3.12,
-                               upper_alarm_limit=3.16,
-                               lower_warning_limit=3.11,
-                               upper_warning_limit=3.17,
-                               lower_ctrl_limit=3.10,
-                               upper_ctrl_limit=3.18,
-                               precision=5,
-                               units='doodles',
-                               ),
-        'enum': ca.ChannelEnum(value='b',
-                               enum_strings=['a', 'b', 'c', 'd'],
-                               ),
-        'int': ca.ChannelInteger(value=33,
-                                 units='poodles',
-                                 lower_disp_limit=33,
-                                 upper_disp_limit=35,
-                                 lower_alarm_limit=32,
-                                 upper_alarm_limit=36,
-                                 lower_warning_limit=31,
-                                 upper_warning_limit=37,
-                                 lower_ctrl_limit=30,
-                                 upper_ctrl_limit=38,
-                                 ),
-        'char': ca.ChannelByte(value=b'3',
-                               units='poodles',
-                               lower_disp_limit=33,
-                               upper_disp_limit=35,
-                               lower_alarm_limit=32,
-                               upper_alarm_limit=36,
-                               lower_warning_limit=31,
-                               upper_warning_limit=37,
-                               lower_ctrl_limit=30,
-                               upper_ctrl_limit=38,
-                               ),
-        'str': ca.ChannelString(value='hello',
-                                alarm=str_alarm_status,
-                                reported_record_type='caproto'),
+        "pi": ca.ChannelDouble(
+            value=3.14,
+            lower_disp_limit=3.13,
+            upper_disp_limit=3.15,
+            lower_alarm_limit=3.12,
+            upper_alarm_limit=3.16,
+            lower_warning_limit=3.11,
+            upper_warning_limit=3.17,
+            lower_ctrl_limit=3.10,
+            upper_ctrl_limit=3.18,
+            precision=5,
+            units="doodles",
+        ),
+        "enum": ca.ChannelEnum(
+            value="b",
+            enum_strings=["a", "b", "c", "d"],
+        ),
+        "int": ca.ChannelInteger(
+            value=33,
+            units="poodles",
+            lower_disp_limit=33,
+            upper_disp_limit=35,
+            lower_alarm_limit=32,
+            upper_alarm_limit=36,
+            lower_warning_limit=31,
+            upper_warning_limit=37,
+            lower_ctrl_limit=30,
+            upper_ctrl_limit=38,
+        ),
+        "char": ca.ChannelByte(
+            value=b"3",
+            units="poodles",
+            lower_disp_limit=33,
+            upper_disp_limit=35,
+            lower_alarm_limit=32,
+            upper_alarm_limit=36,
+            lower_warning_limit=31,
+            upper_warning_limit=37,
+            lower_ctrl_limit=30,
+            upper_ctrl_limit=38,
+        ),
+        "str": ca.ChannelString(
+            value="hello",
+            alarm=str_alarm_status,
+            reported_record_type="caproto"
+        ),
     }
 
     # tack on a unique prefix
-    caget_pvdb = {prefix + key: value
-                  for key, value in caget_pvdb.items()}
+    return {
+        prefix + key: value
+        for key, value in caget_pvdb.items()
+    }
 
+
+def curio_runner(
+    pvdb: Dict[str, ca.ChannelData],
+    client: Callable,
+    *,
+    threaded_client: bool = False,
+    timeout: float = 60.0
+):
     # Hide these imports so that the other fixtures are usable by other
     # libraries (e.g. ophyd) without the experimental dependencies.
     import curio
 
     import caproto.curio
 
-    async def _server(pvdb):
-        ctx = caproto.curio.server.Context(pvdb)
+    async def curio_startup_hook(async_lib):
+        await curio_event.set()
+
+    async def server_main():
         try:
-            await ctx.run()
+            ctx = caproto.curio.server.Context(pvdb)
+            await ctx.run(startup_hook=curio_startup_hook)
         except caproto.curio.server.ServerExit:
-            logger.info('ServerExit caught; exiting')
+            logger.info('Server exited normally')
         except Exception as ex:
             logger.error('Server failed: %s %s', type(ex), ex)
             raise
 
-    async def run_server(client, *, pvdb=caget_pvdb):
-        server_task = await curio.spawn(_server, pvdb, daemon=True)
-
+    async def run_server_and_client():
         try:
-            await client()
-        except caproto.curio.server.ServerExit:
-            ...
+            server_task = await curio.spawn(server_main)
+            await curio_event.wait()
+            # Give this a couple tries, akin to poll_readiness.
+            for _ in range(15):
+                try:
+                    if threaded_client:
+                        await threaded_in_curio_wrapper(client)()
+                    else:
+                        await client()
+                except TimeoutError:
+                    continue
+                else:
+                    break
+            else:
+                raise TimeoutError("ioc failed to start")
         finally:
             await server_task.cancel()
 
-    return run_server, prefix, caget_pvdb
+    async def curio_main():
+        async with curio.timeout_after(timeout):
+            await run_server_and_client()
+
+    with curio.Kernel() as kernel:
+        curio_event = curio.Event()
+        kernel.run(curio_main)
 
 
-@pytest.fixture(scope='function',
-                params=['curio', 'trio', 'asyncio'])
-def server(request):
+def trio_runner(
+    pvdb: Dict[str, ca.ChannelData],
+    client: Callable,
+    *,
+    threaded_client: bool = False,
+    timeout: float = 60.0
+):
+    # Hide these imports so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import trio
 
-    def curio_runner(pvdb, client, *, threaded_client=False):
-        # Hide these imports so that the other fixtures are usable by other
-        # libraries (e.g. ophyd) without the experimental dependencies.
-        import curio
+    import caproto.trio
 
-        import caproto.curio
+    async def trio_server_main(task_status):
+        async def trio_server_startup(async_lib):
+            task_status.started(ctx)
 
-        async def server_main():
-            try:
-                ctx = caproto.curio.server.Context(pvdb)
-                await ctx.run()
-            except caproto.curio.server.ServerExit:
-                logger.info('Server exited normally')
-            except Exception as ex:
-                logger.error('Server failed: %s %s', type(ex), ex)
-                raise
+        try:
+            ctx = caproto.trio.server.Context(pvdb)
+            await ctx.run(startup_hook=trio_server_startup)
+        except Exception as ex:
+            logger.error('Server failed: %s %s', type(ex), ex)
+            raise
 
-        async def run_server_and_client():
-            try:
-                server_task = await curio.spawn(server_main)
-                # Give this a couple tries, akin to poll_readiness.
-                for _ in range(15):
-                    try:
-                        if threaded_client:
-                            await threaded_in_curio_wrapper(client)()
-                        else:
-                            await client()
-                    except TimeoutError:
-                        continue
-                    else:
-                        break
-                else:
-                    raise TimeoutError("ioc failed to start")
-            finally:
-                await server_task.cancel()
-
-        with curio.Kernel() as kernel:
-            kernel.run(run_server_and_client)
-
-    def trio_runner(pvdb, client, *, threaded_client=False):
-        # Hide these imports so that the other fixtures are usable by other
-        # libraries (e.g. ophyd) without the experimental dependencies.
-        import trio
-
-        import caproto.trio
-
-        async def trio_server_main(task_status):
-            try:
-                ctx = caproto.trio.server.Context(pvdb)
-                task_status.started(ctx)
-                await ctx.run()
-            except Exception as ex:
-                logger.error('Server failed: %s %s', type(ex), ex)
-                raise
-
-        async def run_server_and_client():
+    async def run_server_and_client():
+        with trio.fail_after(timeout):
             async with trio.open_nursery() as test_nursery:
                 server_context = await test_nursery.start(trio_server_main)
+                if server_context is None:
+                    raise RuntimeError("Failed to start server")
+
                 # Give this a couple tries, akin to poll_readiness.
                 for _ in range(15):
                     try:
@@ -779,30 +762,53 @@ def server(request):
                         continue
                     else:
                         break
+
                 server_context.stop()
                 # don't leave the server running:
                 test_nursery.cancel_scope.cancel()
 
-        trio.run(run_server_and_client)
+    trio.run(run_server_and_client)
 
-    def asyncio_runner(pvdb, client, *, threaded_client=False):
-        import asyncio
 
-        async def asyncio_server_main():
-            try:
-                ctx = caproto.asyncio.server.Context(pvdb)
-                await ctx.run()
-            except Exception as ex:
-                logger.error('Server failed: %s %s', type(ex), ex)
-                raise
+def asyncio_runner(
+    pvdb: Dict[str, ca.ChannelData],
+    client: Callable,
+    *,
+    threaded_client: bool = False,
+    timeout: float = 60.0
+):
+    event = None
 
-        async def run_server_and_client(loop):
-            tsk = loop.create_task(asyncio_server_main())
-            # Give this a couple tries, akin to poll_readiness.
+    async def asyncio_startup_hook(async_lib):
+        event.set()
+
+    async def asyncio_server_main():
+        try:
+            ctx = caproto.asyncio.server.Context(pvdb)
+            await ctx.run(startup_hook=asyncio_startup_hook)
+        except Exception as ex:
+            logger.error('Server failed: %s %s', type(ex), ex)
+            raise
+
+    async def timeout_handler():
+        loop = asyncio.get_running_loop()
+        await asyncio.sleep(timeout)
+        print("Test timed out!")
+        loop.stop()
+
+    async def run_server_and_client():
+        nonlocal event
+        event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        tsk = loop.create_task(asyncio_server_main())
+        timeout_tsk = loop.create_task(timeout_handler())
+        # Give this a couple tries, akin to poll_readiness.
+        await event.wait()
+        try:
             for _ in range(15):
                 try:
                     if threaded_client:
-                        await loop.run_in_executor(client)
+                        await loop.run_in_executor(None, client)
                     else:
                         await client()
                 except TimeoutError:
@@ -811,11 +817,15 @@ def server(request):
                     break
             tsk.cancel()
             await asyncio.wait((tsk, ))
+        finally:
+            timeout_tsk.cancel()
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(run_server_and_client(loop))
+    asyncio.run(run_server_and_client())
 
+
+@pytest.fixture(scope='function',
+                params=['curio', 'trio', 'asyncio'])
+def server(request):
     if request.param == 'curio':
         curio_runner.backend = 'curio'
         return curio_runner

@@ -98,6 +98,8 @@ host_endian = ('>' if sys.byteorder == 'big' else '<')
 
 
 class VirtualCircuit:
+    circuit: ca.VirtualCircuit
+
     def __init__(self, circuit, client, context):
         self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
@@ -143,16 +145,18 @@ class VirtualCircuit:
                 await sub_spec.db_entry.unsubscribe(queue, sub_spec)
         self.subscriptions.clear()
 
+    async def _send_buffers(self, *commands):
+        """To be implemented in a subclass"""
+        raise NotImplementedError()
+
     async def send(self, *commands):
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            # send bytes over the wire using some caproto utilities
             try:
-                async with self._raw_lock:
-                    await ca.async_send_all(buffers_to_send, self.client.sendmsg)
+                await self._send_buffers(*buffers_to_send)
             except (OSError, CaprotoNetworkError) as ex:
                 raise DisconnectedCircuit(
                     f"Circuit disconnected: {ex}"
@@ -741,12 +745,18 @@ class Context:
                 bytes_received, address = await udp_sock.recvfrom(
                     MAX_UDP_RECV
                 )
+            except ConnectionResetError:
+                # Win32: "On a UDP-datagram socket this error indicates
+                # a previous send operation resulted in an ICMP Port
+                # Unreachable message."
+                #
+                # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                self.log.debug('UDP server recvfrom error')
             except OSError:
                 self.log.exception('UDP server recvfrom error')
-                await self.async_layer.library.sleep(0.1)
-                continue
-            if bytes_received:
-                await self._broadcaster_recv_datagram(bytes_received, address)
+            else:
+                if bytes_received:
+                    await self._broadcaster_recv_datagram(bytes_received, address)
 
     async def _broadcaster_recv_datagram(self, bytes_received, address):
         try:
@@ -1096,6 +1106,13 @@ class Context:
                 try:
                     await circuit.recv()
                 except DisconnectedCircuit:
+                    await self.circuit_disconnected(circuit)
+                    break
+                except Exception:
+                    self.log.exception(
+                        "Client disconnected in unexpected way"
+                    )
+                    await circuit._on_disconnect()
                     await self.circuit_disconnected(circuit)
                     break
         except KeyboardInterrupt as ex:

@@ -161,21 +161,21 @@ class SharedBroadcaster:
     async def _create_socket(self):
         self.udp_sock = ca.bcast_socket(socket_module=socket)
 
-        loop = get_running_loop()
         # Must bind or getsocketname() will raise on Windows.
         # See https://github.com/caproto/caproto/issues/514.
         self.udp_sock.bind(('', 0))
+        await self._create_transport()
 
+    async def _create_transport(self):
+        """Create the _UdpTransportWrapper for the UDP socket"""
+        loop = get_running_loop()
         transport, self.protocol = await loop.create_datagram_endpoint(
             functools.partial(_DatagramProtocol, parent=self,
                               identifier='client-search',
                               queue=self.receive_queue),
             sock=self.udp_sock)
 
-        # TODO: wrapped transport is a server concept for unifying
-        # trio/asyncio/curio
         self.wrapped_transport = _UdpTransportWrapper(transport)
-
         self.broadcaster.client_address = safe_getsockname(self.udp_sock)
 
     async def register(self):
@@ -215,6 +215,18 @@ class SharedBroadcaster:
         queues = collections.defaultdict(list)
         while True:
             _, bytes_received, address = await self.receive_queue.async_get()
+            if isinstance(bytes_received, ConnectionResetError):
+                # Win32: "On a UDP-datagram socket this error indicates a
+                # previous send operation resulted in an ICMP Port Unreachable
+                # message."
+                #
+                # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                self.log.debug(
+                    "Broadcaster received ConnectionResetError",
+                    exc_info=bytes_received
+                )
+                await self._create_transport()
+                continue
             if isinstance(bytes_received, Exception):
                 self.log.exception('Broadcaster receive exception',
                                    exc_info=bytes_received)
@@ -938,9 +950,9 @@ class VirtualCircuitManager:
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.transport = None
         self._ioid_counter = ThreadsafeCounter()
-        self._raw_lock = asyncio.Lock()
         self._ready = asyncio.Event()
         self._send_on_connection = []
+        self._send_lock = asyncio.Lock()
         self._subscriptionid_counter = ThreadsafeCounter()
         self.command_queue = AsyncioQueue()
         self.dead = asyncio.Event()
@@ -993,11 +1005,6 @@ class VirtualCircuitManager:
 
         self.transport = _TransportWrapper(reader, writer)
         self._tasks.create(self._transport_receive_loop(self.transport))
-
-        # this is done by default from 3.6+
-        self.transport.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        # This is required because of `sock_sendall`
-        self.transport.sock.setblocking(False)
 
         self.circuit.our_address = self.transport.getsockname()
 
@@ -1071,18 +1078,11 @@ class VirtualCircuitManager:
         # Turn the crank: inform the VirtualCircuit that these commands will be
         # send, and convert them to buffers.
         buffers_to_send = self.circuit.send(*commands, extra=extra)
+        async with self._send_lock:
+            for buff in buffers_to_send:
+                self.transport.writer.write(bytes(buff))
 
-        # lock to make sure a AddEvent does not write bytes to the socket while
-        # we are sending
-        async def _socket_send(buffers_to_send):
-            'Send a list of buffers over the socket'
-            try:
-                return self.transport.sock.sendmsg(buffers_to_send)
-            except BlockingIOError:
-                raise ca.SendAllRetry()
-
-        async with self._raw_lock:
-            await ca.async_send_all(buffers_to_send, _socket_send)
+            await self.transport.writer.drain()
 
     async def events_off(self):
         """

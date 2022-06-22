@@ -2,8 +2,11 @@
 Release History
 ***************
 
-v0.8.2 (2021-??-??)
+v0.9.0 (2022-??-??)
 ===================
+
+- Python 3.6 and Python 3.7 support has been dropped.
+- Python 3.8 through Python 3.10 are now targeted for support.
 
 Changed
 -------
@@ -13,6 +16,37 @@ Changed
   are now deprecated and will be reverted to pre-pvAccess (no protocol argument
   allowed) signatures in a future release.
 
+Fixed
+-----
+
+- Fixes for all Windows clients, servers, and the repeater relating to PV
+  searches. ``recvfrom`` was occasionally raising ``ConnectionResetError``,
+  which on Windows only means that: "... a previous send operation resulted in
+  an ICMP Port Unreachable message."  This is not fatal in caproto's case and
+  can safely be ignored (or worked around, in the case of asyncio).
+  https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+- Fixed pickle/copy for ChannelData subclasses
+- Fixed synchronous repeater bind address to INADDR_ANY ("0.0.0.0").  Binding
+  to a specific interface meant that on Windows the repeater could not use
+  its client-is-alive detection mechanism by binding to the client port as
+  the bind would always succeed.
+
+Development
+-----------
+
+- Adjusted continuous integration jobs to reflect new supported versions.
+- Improved test suite reliability on continuous integration.
+- Removed buffer-slicing tools and tests in a refactor to avoid ``sendmsg`` on
+  all platforms and async libraries.
+- Removed some old windows compatibility patches in
+  ``caproto._windows_compat``, and avoided monkey-patching for curio by moving
+  its Windows-facing ``curio.run`` modification to
+  ``caproto.curio.utils.curio_run``.
+- Test suite has some built-in timeout-handling functionality on a
+  per-async-library basis, avoiding exiting the entire test suite on Windows
+  (due to limitations of ``pytest-timeout``).
+- Trio socket handling has been updated to follow better practices for recent
+  trio versions.
 
 v0.8.1 (2021-06-03)
 ===================

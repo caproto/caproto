@@ -4,17 +4,15 @@ jobs:
 
 - job: 'Test'
   pool:
-    vmImage: 'Ubuntu 16.04'
+    vmImage: 'ubuntu-18.04'
   strategy:
     matrix:
-      Python 3.6:
-        python.version: '3.6'
-      Python 3.7:
-        python.version: '3.7'
       Python 3.8:
         python.version: '3.8'
       Python 3.9:
         python.version: '3.9'
+      Python 3.10:
+        python.version: '3.10'
 
   steps:
   - task: UsePythonVersion@0
@@ -83,7 +81,7 @@ jobs:
 
   - bash: |
       source $HOME/azure_env.sh
-      coverage run --parallel-mode run_tests.py --timeout=100 -v --junitxml=junit/test-results.xml
+      coverage run --parallel-mode run_tests.py --timeout=100 --junitxml=junit/test-results.xml
     displayName: 'pytest'
 
   - bash: |

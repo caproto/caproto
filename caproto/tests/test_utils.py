@@ -54,27 +54,6 @@ _incr_sends = [
 ]
 
 
-@pytest.mark.parametrize('buffers, offset, expected', _incr_sends)
-def test_buffer_list_slice(buffers, offset, expected):
-    assert ca.buffer_list_slice(*buffers, offset=offset) == expected
-
-
-@pytest.mark.parametrize('buffers, offset, expected', _incr_sends)
-def test_incremental_send(buffers, offset, expected):
-    full_bytes = b''.join(bytes(b) for b in buffers)
-
-    gen = ca.incremental_buffer_list_slice(*buffers)
-    gen.send(None)
-
-    for i in range(len(full_bytes)):
-        try:
-            buffers = gen.send(1)
-        except StopIteration:
-            assert i == (len(full_bytes) - 1), 'StopIteration unexpected'
-            break
-        assert full_bytes[i + 1:] == b''.join(bytes(b) for b in buffers)
-
-
 records_to_check = [
     ['x.NAME', ('x.NAME', 'x', 'NAME', None)],
     ['x.', ('x', 'x', None, None)],
@@ -250,8 +229,8 @@ def test_client_addresses(monkeypatch, protocol, default_port, env_auto,
     # Easier to test without netifaces
     monkeypatch.setattr(ca._utils, 'netifaces', None)
 
-    env[f'EPICS_{protocol}_ADDR_LIST'] = env_addr
-    env[f'EPICS_{protocol}_AUTO_ADDR_LIST'] = env_auto
+    env[f'EPICS_{protocol.value}_ADDR_LIST'] = env_addr
+    env[f'EPICS_{protocol.value}_AUTO_ADDR_LIST'] = env_auto
     if protocol == 'CA':
         env['EPICS_CA_SERVER_PORT'] = int(default_port)
     elif protocol == 'PVA':
@@ -283,3 +262,15 @@ def test_server_addresses(monkeypatch, protocol, env_addr, expected):
 
     patch_env(monkeypatch, env)
     assert set(ca.get_server_address_list(protocol=protocol)) == set(expected)
+
+
+def test_timeout_fixture():
+    import asyncio
+
+    from . import conftest
+
+    async def client():
+        await asyncio.sleep(100)
+
+    with pytest.raises(RuntimeError):
+        conftest.asyncio_runner({}, client, timeout=2.0)

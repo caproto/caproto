@@ -1,4 +1,5 @@
 import functools
+import threading
 
 import trio
 from trio import socket
@@ -88,13 +89,44 @@ class TrioAsyncLayer(AsyncLibraryLayer):
     sleep = staticmethod(trio.sleep)
 
 
+class TrioSocketStreamCompat:
+    _sock: socket.socket  # trio._socket._SocketType
+    _stream: trio.SocketStream
+    _token: trio.lowlevel.TrioToken
+    _send_lock: trio.StrictFIFOLock
+
+    def __init__(self, sock: socket.socket, token: trio.lowlevel.TrioToken):
+        self._sock = sock
+        self._stream = trio.SocketStream(sock)
+        self._token = token
+        self._send_lock = trio.StrictFIFOLock()
+
+    async def recv(self, max_bytes=None):
+        return await self._stream.receive_some(max_bytes)
+
+    def close(self, *args, **kwargs):
+        def _close():
+            trio.from_thread.run(self._stream.aclose, trio_token=self._token)
+
+        threading.Thread(target=_close, daemon=True).start()
+
+    def getsockname(self, *args, **kwargs):
+        return self._sock.getsockname()
+
+    async def send_all(self, data):
+        try:
+            async with self._send_lock:
+                return await self._stream.send_all(data)
+        except trio.BrokenResourceError:
+            raise DisconnectedCircuit("Disconnected while sending to client")
+
+
 class VirtualCircuit(_VirtualCircuit):
     "Wraps a caproto.VirtualCircuit with a trio client."
     TaskCancelled = trio.Cancelled
 
-    def __init__(self, circuit, client, context):
+    def __init__(self, circuit, client: TrioSocketStreamCompat, context):
         super().__init__(circuit, client, context)
-        self._raw_lock = trio.Lock()
         self.nursery = context.nursery
         self.QueueFull = trio.WouldBlock
 
@@ -115,6 +147,10 @@ class VirtualCircuit(_VirtualCircuit):
     async def run(self):
         await self.nursery.start(self.command_queue_loop)
         await self.nursery.start(self.subscription_queue_loop)
+
+    async def _send_buffers(self, *buffers):
+        """Send ``buffers`` over the wire."""
+        await self.client.send_all(b"".join(buffers))
 
     async def command_queue_loop(self, task_status):
         self.write_event.set()
@@ -236,8 +272,14 @@ class Context(_Context):
             listen_sock.listen()
             task_status.started()
             while True:
-                client_sock, addr = await listen_sock.accept()
-                self.nursery.start_soon(self.tcp_handler, client_sock, addr)
+                trio_sock, addr = await listen_sock.accept()
+                stream = TrioSocketStreamCompat(
+                    sock=trio_sock,
+                    token=trio.lowlevel.current_trio_token()
+                )
+                self.nursery.start_soon(
+                    self.tcp_handler, stream, addr
+                )
         finally:
             listen_sock.close()
 

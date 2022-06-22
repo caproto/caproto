@@ -1,13 +1,11 @@
 import asyncio
 import functools
-import sys
+import warnings
 
 import caproto as ca
 
-from .._utils import CaprotoNetworkError
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
-from ..server.common import DisconnectedCircuit
 from ..server.common import VirtualCircuit as _VirtualCircuit
 from .utils import (AsyncioQueue, _create_bound_tcp_socket, _create_udp_socket,
                     _DatagramProtocol, _TaskHandler, _TransportWrapper,
@@ -40,20 +38,27 @@ class VirtualCircuit(_VirtualCircuit):
     "Wraps a caproto.VirtualCircuit with an asyncio client."
     TaskCancelled = asyncio.CancelledError
 
-    def __init__(self, circuit, client, context, *, loop=None):
-        if loop is None:
-            loop = asyncio.get_event_loop()
-        self.loop = loop
+    client: _TransportWrapper
+    context: "Context"
+
+    def __init__(
+        self,
+        circuit: _VirtualCircuit,
+        client: _TransportWrapper,
+        context: "Context",
+        *,
+        loop=None
+    ):
+        if loop is not None:
+            warnings.warn("The loop kwarg will be removed in the future", stacklevel=2)
 
         super().__init__(circuit, client, context)
         self.QueueFull = asyncio.QueueFull
-        self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
-                                           loop=self.loop)
-        self.new_command_condition = asyncio.Condition(loop=self.loop)
-        self.events_on = asyncio.Event(loop=self.loop)
-        self.subscription_queue = asyncio.Queue(
-            ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG, loop=self.loop)
-        self.write_event = Event(loop=self.loop)
+        self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG)
+        self.new_command_condition = asyncio.Condition()
+        self.events_on = asyncio.Event()
+        self.subscription_queue = asyncio.Queue(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.write_event = Event()
         self.tasks = _TaskHandler()
         self._sub_task = None
 
@@ -62,23 +67,28 @@ class VirtualCircuit(_VirtualCircuit):
         # so we do this little stub in its own method.
         fut = asyncio.ensure_future(self.subscription_queue.get())
         try:
-            return await asyncio.wait_for(fut, timeout, loop=self.loop)
+            return await asyncio.wait_for(fut, timeout)
         except asyncio.TimeoutError:
             return None
 
-    async def send(self, *commands):
-        if self.connected:
-            buffers_to_send = self.circuit.send(*commands)
-            try:
-                await self.client.send(b''.join(buffers_to_send))
-            except CaprotoNetworkError as ex:
-                raise DisconnectedCircuit(
-                    f"Circuit disconnected: {ex}"
-                ) from ex
+    async def _send_buffers(self, *buffers):
+        """Send ``buffers`` over the wire."""
+        await self.client.send(b"".join(buffers))
 
     async def run(self):
         self.tasks.create(self.command_queue_loop())
         self._sub_task = self.tasks.create(self.subscription_queue_loop())
+
+    async def command_queue_loop(self):
+        loop = asyncio.get_running_loop()
+        try:
+            return await super().command_queue_loop()
+        except RuntimeError:
+            if loop.is_closed():
+                # Intended to catch: RuntimeError: Event loop is closed
+                return
+            # And raise for everything else
+            raise
 
     async def _start_write_task(self, handle_write):
         self.tasks.create(handle_write())
@@ -102,6 +112,9 @@ class Context(_Context):
     TaskCancelled = asyncio.CancelledError
 
     def __init__(self, pvdb, interfaces=None, *, loop=None):
+        if loop is not None:
+            warnings.warn("The loop kwarg will be removed in the future", stacklevel=2)
+
         super().__init__(pvdb, interfaces)
         self.broadcaster_datagram_queue = AsyncioQueue(
             ca.MAX_COMMAND_BACKLOG
@@ -110,9 +123,7 @@ class Context(_Context):
             ca.MAX_COMMAND_BACKLOG
         )
         self.subscription_queue = asyncio.Queue()
-        if loop is None:
-            loop = asyncio.get_event_loop()
-        self.loop = loop
+
         self.async_layer = AsyncioAsyncLayer()
         self.server_tasks = _TaskHandler()
         self.tcp_sockets = dict()
@@ -156,7 +167,7 @@ class Context(_Context):
                 continue
 
             wrapped_transport = _UdpTransportWrapper(
-                sock, address, loop=self.loop
+                sock, address
             )
             self.beacon_socks[address] = (interface,   # TODO; this is incorrect
                                           wrapped_transport)
@@ -200,7 +211,7 @@ class Context(_Context):
             async_lib = AsyncioAsyncLayer()
             for name, method in self.shutdown_methods.items():
                 self.log.debug('Calling shutdown method %r', name)
-                task = self.loop.create_task(method(async_lib))
+                task = asyncio.get_running_loop().create_task(method(async_lib))
                 shutdown_tasks.append(task)
             await asyncio.gather(*shutdown_tasks)
             for sock in self.tcp_sockets.values():
@@ -223,15 +234,13 @@ class Context(_Context):
 
         sock = _create_udp_socket()
         sock.bind((interface, self.ca_server_port))
-        transport, _ = await self.loop.create_datagram_endpoint(
+        transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(
             functools.partial(_DatagramProtocol, parent=self,
                               identifier=interface,
                               queue=self.broadcaster_datagram_queue),
             sock=sock,
         )
-        self.udp_socks[interface] = _UdpTransportWrapper(
-            transport, loop=self.loop
-        )
+        self.udp_socks[interface] = _UdpTransportWrapper(transport)
         self.log.debug('UDP socket bound on %s:%d', interface,
                        self.ca_server_port)
 
@@ -240,13 +249,21 @@ class Context(_Context):
         queue = self.broadcaster_datagram_queue
         while True:
             interface, data, address = await queue.async_get()
-            if isinstance(data, Exception):
-                self.log.exception('Broadcaster failed to receive on %s',
-                                   interface, exc_info=data)
-                if sys.platform == 'win32':
-                    self.log.warning(
-                        'Re-initializing socket on interface %s', interface
-                    )
+            if isinstance(data, OSError):
+                # Win32: "On a UDP-datagram socket this error indicates a
+                # previous send operation resulted in an ICMP Port Unreachable
+                # message."
+                #
+                # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                # However, asyncio will stop sending callbacks after this with no way to
+                # resume. See: https://github.com/python/cpython/issues/88906
+                # So recreate the socket here and hope for the best:
+                await self._create_broadcaster_transport(interface)
+            elif isinstance(data, Exception):
+                self.log.exception(
+                    "Broadcaster failed to receive on %s",
+                    interface, exc_info=data
+                )
             else:
                 await self._broadcaster_recv_datagram(data, address)
 
@@ -255,8 +272,7 @@ async def start_server(pvdb, *, interfaces=None, log_pv_names=False,
                        startup_hook=None):
     '''Start an asyncio server with a given PV database'''
     ctx = Context(pvdb, interfaces)
-    ret = await ctx.run(log_pv_names=log_pv_names, startup_hook=startup_hook)
-    return ret
+    return await ctx.run(log_pv_names=log_pv_names, startup_hook=startup_hook)
 
 
 def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
@@ -279,14 +295,14 @@ def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
     startup_hook : coroutine, optional
         Hook to call at startup with the ``async_lib`` shim.
     """
-    loop = asyncio.get_event_loop()
-    task = loop.create_task(
-        start_server(pvdb, interfaces=interfaces, log_pv_names=log_pv_names,
-                     startup_hook=startup_hook))
     try:
-        loop.run_until_complete(task)
+        asyncio.run(
+            start_server(
+                pvdb,
+                interfaces=interfaces,
+                log_pv_names=log_pv_names,
+                startup_hook=startup_hook,
+            )
+        )
     except KeyboardInterrupt:
         ...
-    finally:
-        task.cancel()
-        loop.run_until_complete(task)

@@ -41,8 +41,9 @@ class AsyncioQueue:
             self._queue.put(value), self._loop)
 
 
-class _DatagramProtocol(asyncio.Protocol):
+class _DatagramProtocol(asyncio.DatagramProtocol):
     def __init__(self, parent, identifier, queue):
+        super().__init__()
         self.transport = None
         self.parent = parent
         self.identifier = identifier
@@ -67,23 +68,20 @@ class _TransportWrapper:
 
     Parameters
     ----------
-    sock : socket.socket
-        The socket.
+    reader : asyncio.StreamReader
 
-    loop : asyncio.AbstractEventLoop, optional
-        The event loop.
+    writer : asyncio.StreamWriter
     """
 
-    sock: socket.socket
     loop: asyncio.AbstractEventLoop
+    reader: asyncio.StreamReader
+    writer: asyncio.StreamWriter
     transport: asyncio.BaseTransport
 
-    def __init__(self, reader, writer, loop=None):
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         self.reader = reader
         self.writer = writer
-        self.loop = loop or get_running_loop()
-        self.sock = self.writer.get_extra_info('socket')
-        self.lock = asyncio.Lock()
+        self.send_lock = asyncio.Lock()
 
     def getsockname(self):
         return self.writer.get_extra_info('sockname')
@@ -94,7 +92,7 @@ class _TransportWrapper:
     async def send(self, bytes_to_send):
         """Sends data over a connected socket."""
         try:
-            async with self.lock:
+            async with self.send_lock:
                 self.writer.write(bytes_to_send)
                 await self.writer.drain()
         except OSError as exc:
@@ -260,18 +258,6 @@ def _create_udp_socket():
     return sock
 
 
-if sys.version_info < (3, 7):
-    # python <= 3.6 compatibility
-    def get_running_loop():
-        return asyncio.get_event_loop()
-
-    def run(coro, debug=False):
-        return get_running_loop().run_until_complete(coro)
-
-    def create_task(coro):
-        return get_running_loop().create_task(coro)
-
-else:
-    get_running_loop = asyncio.get_running_loop
-    run = asyncio.run
-    create_task = asyncio.create_task
+get_running_loop = asyncio.get_running_loop
+run = asyncio.run
+create_task = asyncio.create_task

@@ -4,7 +4,6 @@ import time
 import pytest
 
 from ..threading.client import Context
-from .conftest import run_example_ioc
 
 
 @pytest.fixture(scope='function')
@@ -36,41 +35,35 @@ def context(request):
                           ('{"arr": {"s": 2, "e": 3}}', [2, 3]),
                           ('{"arr": {"s": 2, "e": 6, "i": 2}}', [2, 5, 13])
                           ])
-def test_array_filter(request, prefix, context, filter, expected):
-    pv_name = f'{prefix}fib'
-    run_example_ioc(
-        'caproto.ioc_examples.advanced.type_varieties',
-        request=request,
-        args=['--prefix', prefix],
-        pv_to_check=pv_name
-    )
+def test_array_filter(request, prefix, context, filter, expected, type_varieties_ioc):
+    pv_name = type_varieties_ioc.pvs["fib"]
 
     pv, = context.get_pvs(pv_name + '.' + filter)
     pv.wait_for_connection()
     event = threading.Event()
 
-    def cb(reading):
-        assert list(reading.data) == expected
+    subscription_reading = None
+
+    def cb(_, reading):
+        nonlocal subscription_reading
+        subscription_reading = reading
         event.set()
+
     # Test read.
     reading = pv.read()
-    cb(reading)
+    cb(None, reading)
     # Test subscribe.
     sub = pv.subscribe()
     event.clear()
     sub.add_callback(cb)
     # Wait for callback to process.
     event.wait(timeout=2)
+    assert subscription_reading is not None
+    assert list(subscription_reading.data) == expected
 
 
-def test_ts_filter(request, prefix, context):
-    pv_name = f'{prefix}fib'
-    run_example_ioc(
-        'caproto.ioc_examples.advanced.type_varieties',
-        request=request,
-        args=['--prefix', prefix],
-        pv_to_check=pv_name
-    )
+def test_ts_filter(request, prefix, context, type_varieties_ioc):
+    pv_name = type_varieties_ioc.pvs["fib"]
 
     # Access one element.
     pv, = context.get_pvs(pv_name)
@@ -85,12 +78,12 @@ def test_ts_filter(request, prefix, context):
 
     event = threading.Event()
 
-    def cb(reading):
+    def cb(_, reading):
         assert reading.metadata.timestamp != proc_time
         event.set()
     # Test read.
     reading = ts_pv.read(data_type='time')
-    cb(reading)
+    cb(None, reading)
     # Test subscribe.
     sub = pv.subscribe(data_type='time')
     event.clear()
@@ -112,16 +105,10 @@ MANY = object()
                           ('{"while": "my_stately_state"}', 1, MANY, 1),
                           ('{"unless": "my_stately_state"}', MANY, 1, MANY),
                           ])
-def test_sync_filter(request, prefix, context, filter, initial, on, off):
-    value_name = f'{prefix}value'
-    enable_state_name = f'{prefix}enable_state'
-    disable_state_name = f'{prefix}disable_state'
-    run_example_ioc('caproto.ioc_examples.states', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=value_name)
+def test_sync_filter(request, prefix, context, filter, initial, on, off, states_ioc):
     responses = []
 
-    def cache(response):
+    def cache(_, response):
         print('* response:', response.data)
         responses.append(response)
 
@@ -133,7 +120,10 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
                 'Expected an exact number of responses'
 
     value, disable_state, enable_state = context.get_pvs(
-        value_name + '.' + filter, disable_state_name, enable_state_name)
+        states_ioc.pvs["value"] + "." + filter,
+        states_ioc.pvs["disable_state"],
+        states_ioc.pvs["enable_state"],
+    )
 
     for pv in (value, disable_state, enable_state):
         pv.wait_for_connection()
@@ -170,14 +160,14 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
                           ('{"dbnd": {"abs": 1}}', [3.14]),
                           # TODO Cover more interesting cases.
                           ])
-def test_dbnd_filter(request, caproto_ioc, context, filter, expected):
+def test_dbnd_filter(request, type_varieties_ioc, context, filter, expected):
 
     responses = []
 
-    def cache(response):
+    def cache(_, response):
         responses.append(response)
 
-    pv, = context.get_pvs(caproto_ioc.pvs['float'] + '.' + filter)
+    pv, = context.get_pvs(type_varieties_ioc.pvs['float'] + '.' + filter)
     pv.wait_for_connection()
 
     sub = pv.subscribe()

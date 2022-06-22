@@ -10,13 +10,11 @@ from .._utils import safe_getsockname
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
+from .utils import curio_run
 
-if hasattr(curio, 'KernelExit'):
-    class ServerExit(curio.KernelExit):
-        ...
-else:
-    class ServerExit(SystemExit):
-        ...
+
+class ServerExit(SystemExit):
+    ...
 
 
 class Event(curio.Event):
@@ -71,7 +69,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
-        self._raw_lock = curio.Lock()
+        self._send_lock = curio.Lock()
         self.QueueFull = QueueFull
         self.command_queue = QueueWithFullError(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = curio.Condition()
@@ -80,6 +78,12 @@ class VirtualCircuit(_VirtualCircuit):
         self.subscription_queue = QueueWithFullError(
             ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
         self.write_event = Event()
+
+    async def _send_buffers(self, *buffers):
+        """Send ``buffers`` over the wire."""
+        async with self._send_lock:
+            for buffer in buffers:
+                await self.client.sendall(bytes(buffer))
 
     async def run(self):
         await self.pending_tasks.spawn(self.command_queue_loop())
@@ -263,13 +267,14 @@ def run(pvdb, *, interfaces=None, log_pv_names=False, startup_hook=None):
         Hook to call at startup with the ``async_lib`` shim.
     """
     try:
-        return curio.run(
+        return curio_run(
             functools.partial(
                 start_server,
                 pvdb,
                 interfaces=interfaces,
                 log_pv_names=log_pv_names,
                 startup_hook=startup_hook,
-            ))
+            )
+        )
     except KeyboardInterrupt:
         return

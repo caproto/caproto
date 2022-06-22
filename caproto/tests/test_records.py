@@ -4,7 +4,6 @@ from caproto import AlarmSeverity, AlarmStatus, ChannelType
 from caproto.sync.client import read, write
 from caproto.threading.pyepics_compat import get_pv
 
-from .conftest import run_example_ioc
 from .test_threading_client import context as _context
 from .test_threading_client import shared_broadcaster as _sb
 
@@ -23,12 +22,8 @@ field_map = {
 }
 
 
-def test_limit_fields_and_description(request, prefix, context):
-    pv = f'{prefix}C'
-    run_example_ioc('caproto.ioc_examples.records',
-                    request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv)
+def test_limit_fields_and_description(request, prefix, context, records_ioc):
+    pv = records_ioc.pvs["C"]
     PV = get_pv(pv, context=context)
 
     def check_fields():
@@ -53,12 +48,8 @@ def test_limit_fields_and_description(request, prefix, context):
 
 @pytest.mark.parametrize('sevr_target', ['LLSV', 'LSV', 'HSV', 'HHSV'])
 @pytest.mark.parametrize('sevr_value', AlarmSeverity)
-def test_alarms(request, prefix, sevr_target, sevr_value, context):
-    pv = f'{prefix}C'
-    run_example_ioc('caproto.ioc_examples.records',
-                    request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv)
+def test_alarms(request, prefix, sevr_target, sevr_value, context, records_ioc):
+    pv = records_ioc.pvs["C"]
     PV = get_pv(pv, context=context)
     get_pv(f'{pv}.{sevr_target}', context=context).put(
         sevr_value, wait=True)

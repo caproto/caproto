@@ -55,10 +55,6 @@ __all__ = (  # noqa F822
     'ensure_bytes',
     'random_ports',
     'bcast_socket',
-    'buffer_list_slice',
-    'incremental_buffer_list_slice',
-    'send_all',
-    'async_send_all',
     'parse_record_field',
     'parse_channel_filter',
     'batch_requests',
@@ -77,7 +73,6 @@ __all__ = (  # noqa F822
     'CaprotoRuntimeError',
     'CaprotoNetworkError',
     'ErrorResponseReceived',
-    'SendAllRetry',
     'RecordModifiers',
     'RecordModifier',
     'RecordAndField',
@@ -337,7 +332,7 @@ def get_manually_specified_client_addresses(
         *, protocol=Protocol.ChannelAccess):
     '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
     return _split_address_list(
-        get_environment_variables()[f'EPICS_{protocol}_ADDR_LIST'])
+        get_environment_variables()[f'EPICS_{protocol.value}_ADDR_LIST'])
 
 
 def get_address_list(*, protocol=Protocol.ChannelAccess):
@@ -351,7 +346,7 @@ def get_address_list(*, protocol=Protocol.ChannelAccess):
 
     env = get_environment_variables()
     addresses = get_manually_specified_client_addresses(protocol=protocol)
-    auto_addr_list = env[f'EPICS_{protocol}_AUTO_ADDR_LIST']
+    auto_addr_list = env[f'EPICS_{protocol.value}_AUTO_ADDR_LIST']
 
     if addresses and auto_addr_list.lower() != 'yes':
         # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
@@ -635,120 +630,6 @@ if 'pypy' in sys.implementation.name:
 else:
     def _cast_buffers_to_byte(buffers):
         return tuple(memoryview(b).cast('b') for b in buffers)
-
-
-def buffer_list_slice(*buffers, offset):
-    'Helper function for slicing a list of buffers'
-    if offset < 0:
-        raise CaprotoValueError('Negative offset')
-
-    buffers = _cast_buffers_to_byte(buffers)
-
-    start = 0
-    for bufidx, buf in enumerate(buffers):
-        end = start + len(buf)
-        if offset < end:
-            offset -= start
-            return (buf[offset:], ) + buffers[bufidx + 1:]
-
-        start = end
-
-    raise CaprotoValueError('Offset beyond end of buffers '
-                            '(total length={} offset={})'.format(end, offset))
-
-
-def incremental_buffer_list_slice(*buffers):
-    'Incrementally slice a list of buffers'
-    buffers = _cast_buffers_to_byte(buffers)
-    total_size = sum(len(b) for b in buffers)
-    total_sent = 0
-
-    while total_sent < total_size:
-        sent = yield buffers
-        total_sent += sent
-        if total_sent == total_size:
-            break
-        buffers = buffer_list_slice(*buffers, offset=sent)
-
-
-class SendAllRetry(CaprotoError):
-    ...
-
-
-def send_all(buffers_to_send, send_func):
-    '''Incrementally slice a list of buffers, and send it using `send_func`
-
-    Parameters
-    ----------
-    buffers_to_send : (buffer1, buffer2, ...)
-        Buffers are expected to be memoryviews or similar
-    send_func : callable
-        Function to call with list of buffers to send
-        Expected to return number of bytes sent or raise SendAllRetry otherwise
-    '''
-
-    if not buffers_to_send:
-        return
-
-    gen = incremental_buffer_list_slice(*buffers_to_send)
-
-    # prime the generator
-    gen.send(None)
-
-    while buffers_to_send:
-        try:
-            while True:
-                try:
-                    sent = send_func(buffers_to_send)
-                    break
-                except OSError:
-                    buffers_to_send = buffers_to_send[:len(buffers_to_send) // 2]
-
-        except SendAllRetry:
-            continue
-
-        try:
-            buffers_to_send = gen.send(sent)
-        except StopIteration:
-            # finished sending
-            break
-
-
-async def async_send_all(buffers_to_send, async_send_func):
-    '''Incrementally slice a list of buffers, and send it using `send_func`
-
-    Parameters
-    ----------
-    buffers_to_send : (buffer1, buffer2, ...)
-        Buffers are expected to be memoryviews or similar
-    async_send_func : callable
-        Async function to call with list of buffers to send
-        Expected to return number of bytes sent or raise SendAllRetry otherwise
-    '''
-
-    if not buffers_to_send:
-        return
-
-    gen = incremental_buffer_list_slice(*buffers_to_send)
-    # prime the generator
-    gen.send(None)
-
-    while buffers_to_send:
-        try:
-            while True:
-                try:
-                    sent = await async_send_func(buffers_to_send)
-                    break
-                except OSError:
-                    buffers_to_send = buffers_to_send[:len(buffers_to_send) // 2]
-        except SendAllRetry:
-            continue
-
-        try:
-            buffers_to_send = gen.send(sent)
-        except StopIteration:
-            # finished sending
-            break
 
 
 RecordAndField = namedtuple('RecordAndField',

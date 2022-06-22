@@ -184,6 +184,7 @@ class SelectorThread:
         self.thread.start()
 
     def add_socket(self, sock, target_obj):
+        assert isinstance(sock, socket.socket)
         with self._socket_map_lock:
             if sock in self.socket_to_id:
                 raise CaprotoValueError('Socket already added')
@@ -257,6 +258,22 @@ class SelectorThread:
                     bytes_available = socket_bytes_available(
                         sock, available_buffer=avail_buf)
                     bytes_recv, address = sock.recvfrom(bytes_available)
+                except ConnectionResetError as ex:
+                    if sock.type == socket.SOCK_DGRAM:
+                        # Win32: "On a UDP-datagram socket this error indicates
+                        # a previous send operation resulted in an ICMP Port
+                        # Unreachable message."
+                        #
+                        # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                        obj.log.debug(
+                            "UDP socket indicates previous send failed %s: %s",
+                            obj,
+                            ex
+                        )
+                        continue
+
+                    obj.log.error("Removing %s due to %s (%s)", obj, ex, ex.errno)
+                    self.remove_socket(sock)
                 except OSError as ex:
                     if ex.errno != errno.EAGAIN:
                         # register as a disconnection
@@ -395,7 +412,7 @@ class SharedBroadcaster:
 
         try:
             self.udp_sock.sendto(bytes_to_send, addr)
-        except OSError as ex:
+        except (OSError, AttributeError) as ex:
             host, specified_port = addr
             self.log.exception('%s while sending %d bytes to %s:%d',
                                ex, len(bytes_to_send), host, specified_port)
@@ -453,8 +470,11 @@ class SharedBroadcaster:
             self.broadcaster.log.debug(
                 '%d commands %dB',
                 len(commands), len(bytes_to_send), extra=tags)
+            sock = self.udp_sock
+            if sock is None:
+                return
             try:
-                self.udp_sock.sendto(bytes_to_send, host_tuple)
+                sock.sendto(bytes_to_send, host_tuple)
             except OSError as ex:
                 host, specified_port = host_tuple
                 raise CaprotoNetworkError(
@@ -1313,19 +1333,13 @@ class VirtualCircuitManager:
     def connected(self):
         return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
-    def _socket_send(self, buffers_to_send):
-        'Send a list of buffers over the socket'
-        try:
-            return self.socket.sendmsg(buffers_to_send)
-        except BlockingIOError:
-            raise ca.SendAllRetry()
-
     def send(self, *commands, extra=None):
         # Turn the crank: inform the VirtualCircuit that these commands will
         # be send, and convert them to buffers.
-        buffers_to_send = self.circuit.send(*commands, extra=extra)
-        # Send bytes over the wire using some caproto utilities.
-        ca.send_all(buffers_to_send, self._socket_send)
+        sock = self.socket
+        if sock is not None:
+            buffers_to_send = self.circuit.send(*commands, extra=extra)
+            sock.sendall(b"".join(buffers_to_send))
 
     def received(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.
