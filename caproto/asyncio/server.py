@@ -249,13 +249,16 @@ class Context(_Context):
         queue = self.broadcaster_datagram_queue
         while True:
             interface, data, address = await queue.async_get()
-            if isinstance(data, ConnectionResetError):
-                ...
+            if isinstance(data, OSError):
                 # Win32: "On a UDP-datagram socket this error indicates a
                 # previous send operation resulted in an ICMP Port Unreachable
                 # message."
                 #
                 # https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom
+                # However, asyncio will stop sending callbacks after this with no way to
+                # resume. See: https://github.com/python/cpython/issues/88906
+                # So recreate the socket here and hope for the best:
+                await self._create_broadcaster_transport(interface)
             elif isinstance(data, Exception):
                 self.log.exception(
                     "Broadcaster failed to receive on %s",

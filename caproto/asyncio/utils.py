@@ -41,8 +41,9 @@ class AsyncioQueue:
             self._queue.put(value), self._loop)
 
 
-class _DatagramProtocol(asyncio.Protocol):
+class _DatagramProtocol(asyncio.DatagramProtocol):
     def __init__(self, parent, identifier, queue):
+        super().__init__()
         self.transport = None
         self.parent = parent
         self.identifier = identifier

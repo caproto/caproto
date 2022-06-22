@@ -35,5 +35,4 @@ if __name__ == "__main__":
     )
 
     ioc = IOInterruptIOC(**ioc_options)
-    print(ioc.image)
     run(ioc.pvdb, **run_options)
