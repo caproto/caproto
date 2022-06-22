@@ -22,9 +22,9 @@ from caproto._log import _set_handler_with_logger, set_handler
 from .. import (AccessRights, AlarmSeverity, AlarmStatus,
                 CaprotoAttributeError, CaprotoRuntimeError, CaprotoTypeError,
                 CaprotoValueError, ChannelAlarm, ChannelByte, ChannelChar,
-                ChannelDouble, ChannelEnum, ChannelFloat, ChannelInteger,
-                ChannelShort, ChannelString, ChannelType, __version__,
-                get_server_address_list)
+                ChannelData, ChannelDouble, ChannelEnum, ChannelFloat,
+                ChannelInteger, ChannelShort, ChannelString, ChannelType,
+                __version__, get_server_address_list)
 from .._backend import backend
 
 module_logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class AsyncLibraryLayer:
     library = None
 
 
-class PvpropertyData:
+class PvpropertyData(ChannelData):
     """
     A top-level class for mixing in with `ChannelData` subclasses.
 
@@ -201,6 +201,19 @@ class PvpropertyData:
         else:
             self.field_inst = None
             self.fields = {}
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state["group"] = None
+        return state
+
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs["pvname"] = self.pvname
+        kwargs["group"] = None
+        kwargs["pvspec"] = self.pvspec
+        kwargs["record"] = self.record_type
+        return (args, kwargs)
 
     async def read(self, data_type):
         """

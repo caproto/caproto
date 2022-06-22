@@ -132,6 +132,18 @@ class ChannelAlarm:
     def __repr__(self):
         return f'<ChannelAlarm(status={self.status}, severity={self.severity})>'
 
+    def __eq__(self, other: "ChannelAlarm") -> bool:
+        if not isinstance(other, ChannelAlarm):
+            return False
+
+        return (
+            self.status == other.status and
+            self.severity == other.severity and
+            self.must_acknowledge_transient == other.must_acknowledge_transient and
+            self.severity_to_acknowledge == other.severity_to_acknowledge and
+            self.alarm_string == other.alarm_string
+        )
+
     def connect(self, channel_data):
         """Add a ChannelData instance to the channel set using this alarm."""
         self._channels.add(channel_data)
@@ -290,6 +302,7 @@ class ChannelData:
             value=value,
             timestamp=TimeStamp.from_flexible_value(timestamp),
         )
+
         # This is a dict keyed on queues that will receive subscription
         # updates.  (Each queue belongs to a Context.) Each value is itself a
         # dict, mapping data_types to the set of SubscriptionSpecs that request
@@ -303,6 +316,12 @@ class ChannelData:
         self._content = {}
         self._snapshots = defaultdict(dict)
         self._fill_at_next_write = list()
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state.pop("_queues", None)
+        state.pop("_snapshots", None)
+        return state
 
     def calculate_length(self, value):
         'Calculate the number of elements given a value'
@@ -362,12 +381,12 @@ class ChannelData:
     def __getnewargs_ex__(self):
         # ref: https://docs.python.org/3/library/pickle.html
         kwargs = {
-            'timestamp': self.epics_timestamp,
+            'timestamp': self.timestamp,
             'alarm': self.alarm,
             'string_encoding': self.string_encoding,
             'reported_record_type': self.reported_record_type,
-            'data': self._data,
-            'max_length': self._max_length
+            'max_length': self._max_length,
+            **self._data
         }
         return ((), kwargs)
 
@@ -389,13 +408,12 @@ class ChannelData:
         "This is called by the server when it enters its StateUpdateContext."
         snapshots = self._snapshots[state]
         snapshots.clear()
-        snapshot = copy.deepcopy(self)
         if new_value:
             # We are changing from false to true.
-            snapshots['before'] = snapshot
+            snapshots['before'] = copy.deepcopy(self)
         else:
             # We are changing from true to false.
-            snapshots['last'] = snapshot
+            snapshots['last'] = copy.deepcopy(self)
 
     def post_state_change(self, state, new_value):
         "This is called by the server when it exits its StateUpdateContext."
@@ -793,7 +811,7 @@ class ChannelData:
                         except KeyError:
                             continue
                     try:
-                        metdata, values = self._content[data_type_name]
+                        metadata, values = self._content[data_type_name]
                     except KeyError:
                         # Do the expensive data type conversion and cache it in
                         # case another queue or a future subscription wants the
