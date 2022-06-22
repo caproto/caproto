@@ -84,7 +84,8 @@ class VirtualCircuit(_VirtualCircuit):
     async def _send_buffers(self, *buffers):
         """Send ``buffers`` over the wire."""
         async with self._send_lock:
-            await self.client.send(b"".join(buffers))
+            for buffer in buffers:
+                await self.client.sendall(bytes(buffer))
 
     async def run(self):
         await self.pending_tasks.spawn(self.command_queue_loop())
