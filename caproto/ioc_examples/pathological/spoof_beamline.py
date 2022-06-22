@@ -3,7 +3,7 @@ import re
 from collections import defaultdict
 
 from caproto import (ChannelChar, ChannelData, ChannelDouble, ChannelEnum,
-                     ChannelString)
+                     ChannelInteger, ChannelString)
 from caproto.server import ioc_arg_parser, run
 
 PLUGIN_TYPE_PVS = [
@@ -72,6 +72,10 @@ def fabricate_channel(key):
     elif ('file' in key.lower() and 'number' not in key.lower() and
           'mode' not in key.lower()):
         return ChannelChar(value='a' * 250)
+    elif ('filenumber' in key.lower()):
+        return ChannelInteger(value=0)
+    elif 'Compression' in key:
+        return ChannelEnum(value=0, enum_strings=['None', 'N-bit', 'szip', 'zlib', 'blosc'])
     return ChannelDouble(value=0.0)
 
 
