@@ -23,12 +23,13 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="function", params=["asyncio"])
 def catvs_ioc_runner():
-    event = None
+    server_startup_event = None
+    test_completed_event = None
     timeout = 30.0
 
     def asyncio_runner(client: Callable, *, threaded_client: bool = False):
         async def asyncio_startup(async_lib):
-            event.set()
+            server_startup_event.set()
 
         async def asyncio_server_main():
             orig_port = os.environ.get("EPICS_CA_SERVER_PORT", "5064")
@@ -49,31 +50,48 @@ def catvs_ioc_runner():
             print("Test timed out!")
             loop.stop()
 
+        async def run_client():
+            if threaded_client:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, client)
+            else:
+                await client()
+            test_completed_event.set()
+
         async def run_server_and_client():
-            nonlocal event
-            event = asyncio.Event()
+            nonlocal server_startup_event
+            nonlocal test_completed_event
+            server_startup_event = asyncio.Event()
+            test_completed_event = asyncio.Event()
             loop = asyncio.get_running_loop()
             tsk = loop.create_task(asyncio_server_main())
             timeout_tsk = loop.create_task(timeout_handler())
-            # Give this a couple tries, akin to poll_readiness.
-            await event.wait()
+            await server_startup_event.wait()
             try:
+                # Give this a couple tries, akin to poll_readiness.
                 for _ in range(5):
                     try:
-                        if threaded_client:
-                            await loop.run_in_executor(None, client)
-                        else:
-                            await client()
+                        await run_client()
                     except TimeoutError:
-                        continue
+                        ...
                     else:
                         break
                 tsk.cancel()
                 await asyncio.wait((tsk, ))
             finally:
                 timeout_tsk.cancel()
+                await asyncio.wait((timeout_tsk, ))
 
-        asyncio.run(run_server_and_client())
+        try:
+            asyncio.run(run_server_and_client())
+        except RuntimeError as ex:
+            if "Event loop stopped before Future completed" not in str(ex):
+                raise
+            if test_completed_event and test_completed_event.is_set():
+                # This is OK, we at least ran our test
+                ...
+            else:
+                raise
 
     # NOTE: catvs expects server tcp_port==udp_port, so make a weak attempt
     # here to avoid clashing between servers
