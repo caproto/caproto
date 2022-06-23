@@ -32,6 +32,10 @@ from .. import (AccessRights, AlarmSeverity, AlarmStatus,
                 __version__, get_server_address_list)
 from .._backend import backend
 
+if typing.TYPE_CHECKING:
+    from .records import RecordFieldGroup
+
+
 module_logger = logging.getLogger(__name__)
 
 
@@ -61,6 +65,7 @@ T_PVGroup = TypeVar("T_PVGroup", bound="PVGroup")
 T_pvproperty = TypeVar("T_pvproperty", bound="pvproperty")
 T_contra = TypeVar("T_contra", contravariant=True)
 T_SubGroup = TypeVar("T_SubGroup", bound="SubGroup")
+T_RecordFields = TypeVar("T_RecordFields", bound="RecordFieldGroup")
 
 
 class Getter(Protocol[T_contra]):
@@ -92,6 +97,39 @@ class Scan(Protocol[T_contra]):
 class Shutdown(Protocol[T_contra]):
     async def __call__(
         _self, self: PVGroup, instance: T_contra, async_lib: AsyncLibraryLayer
+    ) -> None:
+        ...
+
+
+class BoundGetter(Protocol[T_contra]):
+    async def __call__(_self, instance: T_contra) -> Optional[Any]:
+        ...
+
+
+class BoundPutter(Protocol[T_contra]):
+    async def __call__(
+        _self, instance: T_contra, value: Any
+    ) -> Optional[Any]:
+        ...
+
+
+class BoundStartup(Protocol[T_contra]):
+    async def __call__(
+        _self, instance: T_contra, async_lib: AsyncLibraryLayer
+    ) -> None:
+        ...
+
+
+class BoundScan(Protocol[T_contra]):
+    async def __call__(
+        _self, instance: T_contra, async_lib: AsyncLibraryLayer
+    ) -> None:
+        ...
+
+
+class BoundShutdown(Protocol[T_contra]):
+    async def __call__(
+        _self, instance: T_contra, async_lib: AsyncLibraryLayer
     ) -> None:
         ...
 
@@ -130,7 +168,7 @@ class AsyncLibraryLayer:
     library = None
 
 
-class PvpropertyData(ChannelData):
+class PvpropertyData(Generic[T_RecordFields], ChannelData):
     """
     A top-level class for mixing in with `ChannelData` subclasses.
 
@@ -160,8 +198,32 @@ class PvpropertyData(ChannelData):
         Passed to the superclass, along with reported_record_type.
     """
 
-    def __init__(self, *, pvname, group, pvspec, doc=None, record=None,
-                 logger=None, **kwargs):
+    field_inst: T_RecordFields
+    fields: Dict[str, ChannelData]
+    getter: Optional[BoundGetter]
+    group: PVGroup
+    log: logging.Logger
+    name: str
+    putter: Optional[BoundPutter]
+    pvname: str
+    pvspec: PVSpec
+    record_type: Optional[str]
+    scan: Optional[BoundScan]
+    shutdown: Optional[BoundShutdown]
+    startup: Optional[BoundStartup]
+
+    def __init__(
+        self,
+        *,
+        pvname: str,
+        group: PVGroup,
+        pvspec: PVSpec,
+        doc: Optional[str] = None,
+        record: Optional[Union[str, Type[T_RecordFields]]] = None,
+        # record: Optional[Union[str, T_RecordFields]] = None,
+        logger: Optional[logging.Logger] = None,
+        **kwargs
+    ):
         self.pvname = pvname  # the full, expanded PV name
         self.pvspec = pvspec
         if group is not None:
@@ -218,8 +280,7 @@ class PvpropertyData(ChannelData):
                          **kwargs)
 
         if self.record_type is not None:
-            from .records import records
-            field_class = records[self.record_type]
+            field_class = get_record_class(self.record_type)
             if self.pvspec.fields is not None:
                 clsdict = {}
                 # Update all fields with user-customized putters
@@ -307,17 +368,20 @@ class PvpropertyData(ChannelData):
 
     async def _server_startup(self, async_lib):
         """A per-pvproperty startup hook; enabled at __init__ time."""
-        return await self.startup(self, async_lib)
+        if self.startup is not None:
+            return await self.startup(self, async_lib)
 
     async def _server_shutdown(self, async_lib):
         """A per-pvproperty shutdown hook; enabled at __init__ time."""
-        return await self.shutdown(self, async_lib)
+        if self.shutdown is not None:
+            return await self.shutdown(self, async_lib)
 
     async def _server_scan(self, async_lib):
         """A per-pvproperty 'scan' hook; enabled at __init__ time."""
-        return await self.scan(self, async_lib)
+        if self.scan is not None:
+            return await self.scan(self, async_lib)
 
-    def get_field(self, field):
+    def get_field(self, field: str) -> ChannelData:
         """
         Get a field by name.
 
@@ -341,35 +405,35 @@ class PvpropertyData(ChannelData):
         return self.fields[field]
 
 
-class PvpropertyChar(PvpropertyData, ChannelChar):
+class PvpropertyChar(PvpropertyData[T_RecordFields], ChannelChar):
     """Read-write 8-bit CHAR data for pvproperty with string encoding."""
 
 
-class PvpropertyByte(PvpropertyData, ChannelByte):
+class PvpropertyByte(PvpropertyData[T_RecordFields], ChannelByte):
     """Read-write 8-bit CHAR data for pvproperty for bytes."""
 
 
-class PvpropertyShort(PvpropertyData, ChannelShort):
+class PvpropertyShort(PvpropertyData[T_RecordFields], ChannelShort):
     """Read-write SHORT/INT data for pvproperty (16 bits)."""
 
 
-class PvpropertyInteger(PvpropertyData, ChannelInteger):
+class PvpropertyInteger(PvpropertyData[T_RecordFields], ChannelInteger, Generic[T_RecordFields]):
     """Read-write LONG data for pvproperty (32 bits)."""
 
 
-class PvpropertyFloat(PvpropertyData, ChannelFloat):
+class PvpropertyFloat(PvpropertyData[T_RecordFields], ChannelFloat):
     """Read-write FLOAT data for pvproperty (32 bits)."""
 
 
-class PvpropertyDouble(PvpropertyData, ChannelDouble):
+class PvpropertyDouble(PvpropertyData[T_RecordFields], ChannelDouble):
     """Read-write DOUBLE data for pvproperty (64 bits)."""
 
 
-class PvpropertyString(PvpropertyData, ChannelString):
+class PvpropertyString(PvpropertyData[T_RecordFields], ChannelString):
     """Read-write STRING data for pvproperty (up to 40 chars)."""
 
 
-class PvpropertyEnum(PvpropertyData, ChannelEnum):
+class PvpropertyEnum(PvpropertyData[T_RecordFields], ChannelEnum):
     """Read-write ENUM data for pvproperty."""
 
     def __init__(self, *, enum_strings=None, value=None, **kwargs):
@@ -385,7 +449,7 @@ class PvpropertyEnum(PvpropertyData, ChannelEnum):
                          **kwargs)
 
 
-class PvpropertyBoolEnum(PvpropertyData, ChannelEnum):
+class PvpropertyBoolEnum(PvpropertyData[T_RecordFields], ChannelEnum):
     """Read-write ENUM data for pvproperty, with Off/On as default strings."""
 
     def __init__(self, *, enum_strings=None, **kwargs):
@@ -394,42 +458,42 @@ class PvpropertyBoolEnum(PvpropertyData, ChannelEnum):
         super().__init__(enum_strings=enum_strings, **kwargs)
 
 
-class PvpropertyReadOnlyData(PvpropertyData):
+class PvpropertyReadOnlyData(PvpropertyData[T_RecordFields]):
     """A mixin class which marks this data as read-only from channel access."""
 
     def check_access(self, host, user):
         return AccessRights.READ
 
 
-class PvpropertyCharRO(PvpropertyReadOnlyData, ChannelChar):
+class PvpropertyCharRO(PvpropertyReadOnlyData[T_RecordFields], ChannelChar):
     """Read-only 8-bit CHAR data for pvproperty with string encoding."""
 
 
-class PvpropertyByteRO(PvpropertyReadOnlyData, ChannelByte):
+class PvpropertyByteRO(PvpropertyReadOnlyData[T_RecordFields], ChannelByte):
     """Read-only 8-bit CHAR data for pvproperty for bytes."""
 
 
-class PvpropertyShortRO(PvpropertyReadOnlyData, ChannelShort):
+class PvpropertyShortRO(PvpropertyReadOnlyData[T_RecordFields], ChannelShort):
     """Read-only SHORT/INT data for pvproperty (16 bits)."""
 
 
-class PvpropertyIntegerRO(PvpropertyReadOnlyData, ChannelInteger):
+class PvpropertyIntegerRO(PvpropertyReadOnlyData[T_RecordFields], ChannelInteger):
     """Read-only LONG data for pvproperty (32 bits)."""
 
 
-class PvpropertyFloatRO(PvpropertyReadOnlyData, ChannelFloat):
+class PvpropertyFloatRO(PvpropertyReadOnlyData[T_RecordFields], ChannelFloat):
     """Read-only FLOAT data for pvproperty (32 bits)."""
 
 
-class PvpropertyDoubleRO(PvpropertyReadOnlyData, ChannelDouble):
+class PvpropertyDoubleRO(PvpropertyReadOnlyData[T_RecordFields], ChannelDouble):
     """Read-only DOUBLE data for pvproperty (64 bits)."""
 
 
-class PvpropertyStringRO(PvpropertyReadOnlyData, ChannelString):
+class PvpropertyStringRO(PvpropertyReadOnlyData[T_RecordFields], ChannelString):
     """Read-only STRING data for pvproperty (up to 40 chars)."""
 
 
-class PvpropertyEnumRO(PvpropertyReadOnlyData, ChannelEnum):
+class PvpropertyEnumRO(PvpropertyReadOnlyData[T_RecordFields], ChannelEnum):
     """Read-only ENUM data for pvproperty."""
 
     def __init__(self, *, enum_strings=None, value=None, **kwargs):
@@ -445,7 +509,7 @@ class PvpropertyEnumRO(PvpropertyReadOnlyData, ChannelEnum):
                          **kwargs)
 
 
-class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
+class PvpropertyBoolEnumRO(PvpropertyReadOnlyData[T_RecordFields], ChannelEnum):
     """Read-only ENUM data for pvproperty, with Off/On as default strings."""
 
     def __init__(self, *, enum_strings=None, **kwargs):
@@ -463,7 +527,7 @@ _hook_signature_info = {
 }
 
 
-def check_signature(type_: str, func: Optional[callable], expect_method: bool):
+def check_signature(type_: str, func: Optional[Callable], expect_method: bool) -> None:
     """Check the signature of a hook method."""
     if func is None:
         return
@@ -648,13 +712,14 @@ class PVSpec(namedtuple('PVSpec',
             type_map = group.type_map
             type_map_read_only = group.type_map_read_only
 
-        dtype = self.dtype
+        dtype = typing.get_origin(self.dtype) or self.dtype
 
-        # A special case for integer enums:
         if inspect.isclass(dtype):
             if issubclass(dtype, enum.IntEnum):
+                # A special case for integer enums:
                 dtype = enum.IntEnum
             elif issubclass(dtype, ChannelData):
+                # For directly specifying the ChannelData class
                 return dtype
 
         if self.read_only:
@@ -662,7 +727,9 @@ class PVSpec(namedtuple('PVSpec',
 
         return type_map[dtype]
 
-    def get_instantiation_info(self, group=None):
+    def get_instantiation_info(
+        self, group: Optional[PVGroup] = None
+    ) -> Tuple[Type[ChannelData], Dict[str, Any]]:
         """
         Get class and instantiation arguments, given a parent group.
 
@@ -697,18 +764,12 @@ class PVSpec(namedtuple('PVSpec',
         if alarm and not isinstance(alarm, ChannelAlarm):
             raise ValueError(f"Alarm instance required for {full_pvname!r}")
 
-        if group is not None:
-            value = (
-                self.value
-                if self.value is not None
-                else group.default_values.get(self.dtype, cls.default_value)
-            )
+        if self.value is not None:
+            value = self.value
+        elif group is not None:
+            value = group.default_values.get(self.dtype, cls.default_value)
         else:
-            value = (
-                self.value
-                if self.value is not None
-                else cls.default_value
-            )
+            value = cls.default_value
 
         return cls, dict(
             group=group,
@@ -736,8 +797,13 @@ class PVSpec(namedtuple('PVSpec',
 
 
 def scan_wrapper(
-    scan_function, period, *, subtract_elapsed=True, stop_on_error=False,
-    failure_severity=AlarmSeverity.MAJOR_ALARM, use_scan_field=False
+    scan_function: Scan,
+    period: float,
+    *,
+    subtract_elapsed: bool = True,
+    stop_on_error: bool = False,
+    failure_severity: AlarmSeverity = AlarmSeverity.MAJOR_ALARM,
+    use_scan_field: bool = False
 ):
     """
     Wrap a function intended for `pvproperty.scan` with common logic to
@@ -783,9 +849,11 @@ def scan_wrapper(
                     severity=AlarmSeverity.NO_ALARM,
                 )
 
-    async def scanned_startup(group, prop, async_lib):
+    async def scanned_startup(
+        group: PVGroup, prop: PvpropertyData, async_lib: AsyncLibraryLayer
+    ):
         if use_scan_field and period is not None:
-            if prop.field_inst.scan_rate_sec is None:
+            if prop.field_inst is not None and prop.field_inst.scan_rate_sec is None:
                 # This is a hook to allow setting of the default scan rate
                 # through the 'period' argument of the decorator.
                 prop.field_inst._scan_rate_sec = period
@@ -834,25 +902,25 @@ class FieldProxy:
         self.record_class = record_class
         self.field_name = field_name
 
-    def getter(self, getter):
+    def getter(self, getter: Getter):
         self.field_spec._update(self.field_name, 'get', getter)
-        return self.field_spec.prop
+        return self.field_spec._prop
 
-    def putter(self, putter):
+    def putter(self, putter: Putter):
         self.field_spec._update(self.field_name, 'put', putter)
-        return self.field_spec.prop
+        return self.field_spec._prop
 
-    def startup(self, startup):
+    def startup(self, startup: Startup):
         self.field_spec._update(self.field_name, 'startup', startup)
-        return self.field_spec.prop
+        return self.field_spec._prop
 
-    def scan(self, scan):
+    def scan(self, scan: Scan):
         self.field_spec._update(self.field_name, 'scan', scan)
-        return self.field_spec.prop
+        return self.field_spec._prop
 
-    def shutdown(self, shutdown):
+    def shutdown(self, shutdown: Shutdown):
         self.field_spec._update(self.field_name, 'shutdown', shutdown)
-        return self.field_spec.prop
+        return self.field_spec._prop
 
     def __repr__(self):
         return (f'<FieldProxy record={self.record_class.__name__} '
@@ -871,29 +939,27 @@ class FieldSpec:
     This class is primarily for internal use only.
     """
 
-    def __init__(self, prop, *, record_type=None):
-        self.prop = prop
+    def __init__(self, prop: pvproperty, *, record_type: RecordFieldGroup):
+        self._prop = prop
         self._record_type = record_type
         self._fields = {}
 
     @property
     def record_type(self):
-        return self._record_type
+        return self._record_type._record_type
 
-    def __getattr__(self, attr):
-        from .records import RecordFieldGroup, records
-        rec_class = records.get(self._record_type, RecordFieldGroup)
+    def __getattr__(self, attr: str) -> FieldProxy:
         # Validate that the attribute is either the full field name or its
         # corresponding friendly attribute name
-        if attr not in rec_class._pvs_:
+        if attr not in self._record_type._pvs_:
             # TODO: a map would be nice here
-            for real_attr, pvprop in rec_class._pvs_.items():
+            for real_attr, pvprop in self._record_type._pvs_.items():
                 if pvprop.pvspec.name == attr:
                     attr = real_attr
                     break
             else:
                 raise CaprotoAttributeError(f'Unknown field specified: {attr}')
-        return FieldProxy(self, rec_class, attr)
+        return FieldProxy(self, self._record_type, attr)
 
     @property
     def fields(self):
@@ -901,11 +967,38 @@ class FieldSpec:
 
     def _update(self, field, attr, value):
         self._fields[(field, attr)] = value
-        self.prop.pvspec = self.prop.pvspec._replace(fields=self.fields)
+        self._prop.pvspec = self._prop.pvspec._replace(fields=self.fields)
 
     def __repr__(self):
         return (f'<FieldSpec record={self._record_type} '
                 f'fields={self.fields}>')
+
+
+def get_record_class(record: Union[str, "RecordFieldGroup"]) -> "RecordFieldGroup":
+    """Get the record class by name."""
+    if isinstance(record, str):
+        from .records import records
+        try:
+            return records[record]
+        except KeyError:
+            raise ValueError(f"Invalid record type name: {record}")
+    return record
+
+
+def _get_type_and_record_from_generic(
+    obj,
+) -> Tuple[Optional[Type[PvpropertyData]], Optional[Type[RecordFieldGroup]]]:
+    """Get classes from a ``PvpropertyShort[AiFields]``-style annotation."""
+    dtype = typing.get_origin(obj)
+
+    dtype_args = typing.get_args(obj)
+    if len(dtype_args) != 1:
+        # e.g., PvpropertyDouble
+        return dtype, None
+
+    # e.g., PvpropertyDouble[AiFields]
+    record_type, = dtype_args
+    return dtype, record_type
 
 
 class pvproperty(Generic[T_Data]):
@@ -987,8 +1080,8 @@ class pvproperty(Generic[T_Data]):
         doc: Optional[str] = None,
         read_only: Optional[bool] = None,
         field_spec=None,
-        fields=None,
-        record: Optional[str] = None,
+        fields: Optional[FieldSpec] = None,
+        record: Optional[Union[str, Type[RecordFieldGroup]]] = None,
         **cls_kwargs
     ):
         self.attr_name = None  # to be set later
@@ -996,52 +1089,37 @@ class pvproperty(Generic[T_Data]):
         if doc is None and get is not None:
             doc = get.__doc__
 
-        if field_spec is not None:
-            if record and record != field_spec.record_type:
-                raise CaprotoValueError(
-                    'Cannot specify both field_spec and record; the record '
-                    'type from field_spec must be used'
-                )
-            record = field_spec.record_type
-        elif record:
-            field_spec = FieldSpec(self, record_type=record)
-
         check_signature('get', get, expect_method=True)
         check_signature('put', put, expect_method=True)
         check_signature('startup', startup, expect_method=True)
         check_signature('scan', scan, expect_method=True)
         check_signature('shutdown', shutdown, expect_method=True)
 
-        self.field_spec = field_spec
+        gen_dtype, gen_rtype = _get_type_and_record_from_generic(dtype)
+        record = gen_rtype or record
+
+        if record is not None:
+            self.field_spec = FieldSpec(self, record_type=get_record_class(record))
+        else:
+            self.field_spec = field_spec
+
         self.pvspec = PVSpec(
             get=get,
             put=put,
             startup=startup,
             shutdown=shutdown,
             name=name,
-            dtype=dtype,
+            dtype=gen_dtype or dtype,
             value=value,
             max_length=max_length,
             alarm_group=alarm_group,
             read_only=read_only,
             doc=doc,
-            fields=getattr(self.field_spec, 'fields', None),
+            fields=fields,
             record=record,
             cls_kwargs=cls_kwargs
         )
         self.__doc__ = doc
-
-    def _get_class_from_annotation(self) -> Optional[Type[T_Data]]:
-        """Get a class from a ``pvproperty[cls]`` annotation."""
-        annotation = getattr(self, "__orig_class__", None)
-        print(self, "annotation is", annotation)
-        if not annotation:
-            return None
-
-        args = typing.get_args(annotation)
-        if not args or not len(args) == 1:
-            return None
-        return args[0]
 
     @property
     def record_type(self):
@@ -1060,7 +1138,7 @@ class pvproperty(Generic[T_Data]):
         )
         if copied.field_spec:
             # Update the reference to the parent property:
-            copied.field_spec.prop = copied
+            copied.field_spec._prop = copied
         return copied
 
     @typing.overload
@@ -1095,20 +1173,16 @@ class pvproperty(Generic[T_Data]):
         """Descriptor method: auto-called to set the attribute name."""
         self.attr_name = name
 
-        # Use the type parameter T_Data to specify the type, if available
-        if self.pvspec.dtype is None:
-            dtype = self._get_class_from_annotation()
-            if dtype is not None:
-                self.pvspec = self.pvspec._replace(
-                    dtype=dtype
-                )
+        if self.pvspec.name is not None:
+            pvname = self.pvspec.name
+        else:
+            pvname = self.attr_name
 
-        # update the PV specification with the attribute name
-        self.pvspec = self.pvspec.new_names(
-            self.attr_name,
-            self.pvspec.name
-            if self.pvspec.name is not None
-            else self.attr_name)
+        self.pvspec = self.pvspec._replace(
+            attr=self.attr_name,
+            name=pvname,
+            fields=getattr(self.field_spec, "fields", None),
+        )
 
     def getter(self: T_pvproperty, get: Getter) -> T_pvproperty:
         """
@@ -1445,7 +1519,7 @@ class SubGroup(Generic[T_PVGroup]):
 
         return copied
 
-    def __set_name__(self, owner, name):
+    def __set_name__(self, owner: Type[PVGroup], name: str):
         self.attr_name = name
         if self.group_cls is None:
             # generate the group class, in the case of a dict-based subgroup
@@ -1714,7 +1788,7 @@ class pvfunction(SubGroup):
                        for param in parameters]
         return self._class_dict_from_pvspec(self.pvspec)
 
-    def __set_name__(self, owner, name):
+    def __set_name__(self, owner: Type[PVGroup], name: str):
         self.group_dict = self._generate_class_dict()
         super().__set_name__(owner, name)
 

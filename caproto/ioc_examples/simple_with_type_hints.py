@@ -2,9 +2,11 @@
 from textwrap import dedent
 
 from caproto.server import PVGroup
+from caproto.server import PvpropertyDouble as Double
 from caproto.server import PvpropertyDoubleRO as DoubleRO
 from caproto.server import PvpropertyInteger as Integer
 from caproto.server import ioc_arg_parser, pvproperty, run
+from caproto.server.records import AiFields
 
 
 class SimpleIOC(PVGroup):
@@ -32,9 +34,15 @@ class SimpleIOC(PVGroup):
         dtype=DoubleRO,
         doc="A read-only floating point value"
     )
-    C = pvproperty[Integer](
+    C = pvproperty(
         value=[1, 2, 3],
-        doc='An array of integers (max length 3)'
+        dtype=Integer,
+        doc="An array of integers (max length 3)"
+    )
+    D = pvproperty(
+        value=4.5,
+        dtype=Double[AiFields],
+        doc="A floating point value with ai record fields"
     )
 
     # If you use mypy, you could use the following in this class definition:
@@ -56,5 +64,7 @@ if __name__ == '__main__':
     print("A is", ioc.A.data_type)
     print("B is", ioc.B.data_type)
     print("C is", ioc.C.data_type)
+    print("D is", ioc.D.data_type, "record type", ioc.D.field_inst.record_type.value,
+          "random field", ioc.D.field_inst.access_security_group)
 
     run(ioc.pvdb, **run_options)
