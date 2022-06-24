@@ -6,9 +6,9 @@ from caproto.server.records import AiFields, AoFields
 
 class RecordMockingIOC(PVGroup):
     # Define three records, an analog input (ai) record:
-    A = pvproperty(value=1.0, dtype=PvpropertyDouble, record=AiFields)
+    A = pvproperty(value=1.0, dtype=PvpropertyDouble[AiFields], record=AiFields)
     # And an analog output (ao) record:
-    B = pvproperty(value=2.0, record=AoFields, precision=3)
+    B = pvproperty(value=2.0, dtype=PvpropertyDouble, record=AoFields, precision=3)
     # and an ai with all the bells and whistles
     C = pvproperty(
         value=0.0,

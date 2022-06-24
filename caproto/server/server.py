@@ -559,7 +559,7 @@ class PVSpec(namedtuple('PVSpec',
         Keyword arguments for the ChannelData-based class
     """
     __slots__ = ()
-    default_dtype = int
+    default_dtype: ClassVar[type] = int
 
     get: Optional[Getter]
     put: Optional[Putter]
