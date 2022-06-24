@@ -209,8 +209,6 @@ class PvpropertyData(Generic[T_RecordFields], ChannelData):
             if pvspec.shutdown is not None:
                 self.server_shutdown = self._server_shutdown
 
-        assert self.name is not None, "PV must have a name"
-
         if doc is not None:
             self.__doc__ = doc
 
