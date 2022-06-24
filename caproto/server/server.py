@@ -19,8 +19,8 @@ import time
 import typing
 from collections import OrderedDict, defaultdict, namedtuple
 from types import MethodType
-from typing import (Any, Callable, Dict, Generic, Optional, Tuple, Type,
-                    TypeVar, Union, cast)
+from typing import (Any, Callable, ClassVar, Dict, Generic, List, Optional,
+                    Tuple, Type, TypeVar, Union, cast)
 
 from caproto._log import _set_handler_with_logger, set_handler
 
@@ -31,9 +31,9 @@ from .. import (AccessRights, AlarmSeverity, AlarmStatus,
                 ChannelInteger, ChannelShort, ChannelString, ChannelType,
                 __version__, get_server_address_list)
 from .._backend import backend
-from .typing import (AsyncLibraryLayer, BoundGetter, BoundPutter, BoundScan,
-                     BoundShutdown, BoundStartup, Getter, Putter, Scan,
-                     Shutdown, Startup)
+from .typing import (AinitHook, AsyncLibraryLayer, BoundGetter, BoundPutter,
+                     BoundScan, BoundShutdown, BoundStartup, Getter, Putter,
+                     Scan, Shutdown, Startup)
 
 if typing.TYPE_CHECKING:
     from .records import RecordFieldGroup
@@ -42,25 +42,43 @@ if typing.TYPE_CHECKING:
 module_logger = logging.getLogger(__name__)
 
 
-__all__ = ['AsyncLibraryLayer',
-           'NestedPvproperty', 'PVGroup', 'PVSpec', 'SubGroup',
-           'channeldata_from_pvspec', 'data_class_from_pvspec',
-           'expand_macros', 'get_pv_pair_wrapper', 'pvfunction', 'pvproperty',
-           'scan_wrapper',
-
-           'PvpropertyData', 'PvpropertyReadOnlyData',
-           'PvpropertyByte', 'PvpropertyByteRO',
-           'PvpropertyChar', 'PvpropertyCharRO',
-           'PvpropertyDouble', 'PvpropertyDoubleRO',
-           'PvpropertyFloat', 'PvpropertyFloatRO',
-           'PvpropertyBoolEnum', 'PvpropertyBoolEnumRO',
-           'PvpropertyEnum', 'PvpropertyEnumRO',
-           'PvpropertyInteger', 'PvpropertyIntegerRO',
-           'PvpropertyShort', 'PvpropertyShortRO',
-           'PvpropertyString', 'PvpropertyStringRO',
-
-           'ioc_arg_parser', 'template_arg_parser', 'run',
-           ]
+__all__ = [
+    "AsyncLibraryLayer",
+    "NestedPvproperty",
+    "PVGroup",
+    "PVSpec",
+    "SubGroup",
+    "channeldata_from_pvspec",
+    "data_class_from_pvspec",
+    "expand_macros",
+    "get_pv_pair_wrapper",
+    "pvfunction",
+    "pvproperty",
+    "scan_wrapper",
+    "PvpropertyData",
+    "PvpropertyReadOnlyData",
+    "PvpropertyByte",
+    "PvpropertyByteRO",
+    "PvpropertyChar",
+    "PvpropertyCharRO",
+    "PvpropertyDouble",
+    "PvpropertyDoubleRO",
+    "PvpropertyFloat",
+    "PvpropertyFloatRO",
+    "PvpropertyBoolEnum",
+    "PvpropertyBoolEnumRO",
+    "PvpropertyEnum",
+    "PvpropertyEnumRO",
+    "PvpropertyInteger",
+    "PvpropertyIntegerRO",
+    "PvpropertyShort",
+    "PvpropertyShortRO",
+    "PvpropertyString",
+    "PvpropertyStringRO",
+    "ioc_arg_parser",
+    "template_arg_parser",
+    "run",
+]
 
 
 T_Data = TypeVar("T_Data", bound="PvpropertyData")
@@ -654,7 +672,7 @@ class PVSpec(namedtuple('PVSpec',
 
     def get_instantiation_info(
         self, group: Optional[PVGroup] = None
-    ) -> Tuple[Type[ChannelData], Dict[str, Any]]:
+    ) -> Tuple[Type[PvpropertyData], Dict[str, Any]]:
         """
         Get class and instantiation arguments, given a parent group.
 
@@ -665,7 +683,7 @@ class PVSpec(namedtuple('PVSpec',
 
         Returns
         -------
-        cls : Type[ChannelData]
+        cls : Type[PvpropertyData]
             The class to instantiate.
 
         kwargs : dict
@@ -707,7 +725,7 @@ class PVSpec(namedtuple('PVSpec',
             **(self.cls_kwargs or {})
         )
 
-    def create(self, group=None):
+    def create(self, group: Optional[PVGroup] = None) -> PvpropertyData:
         """Create a ChannelData instance based on this PVSpec."""
         cls, kwargs = self.get_instantiation_info(group)
         try:
@@ -1849,6 +1867,12 @@ class PVGroup(metaclass=PVGroupMeta):
         https://epics.anl.gov/base/R3-15/5-docs/filters.html
     """
 
+    _pvs_: ClassVar[Dict[str, PvpropertyData]]
+    _subgroups_: ClassVar[Dict[str, SubGroup]]
+    pvdb: Dict[str, PvpropertyData]
+    attr_pvdb: Dict[str, PvpropertyData]
+    attr_to_pvname: Dict[str, str]
+    groups: Dict[str, PVGroup]
     type_map = dict(pvspec_type_map)
     type_map_read_only = dict(pvspec_type_map_read_only)
 
@@ -1878,10 +1902,7 @@ class PVGroup(metaclass=PVGroupMeta):
         self.groups = OrderedDict()
 
         if not hasattr(self, 'states'):
-            if hasattr(self.parent, 'states'):
-                self.states = self.parent.states
-            else:
-                self.states = {}
+            self.states = getattr(self.parent, "states", {})
 
         self.update_state = functools.partial(_StateUpdateContext, self)
 
@@ -1998,8 +2019,14 @@ class _ReadWriteSubGroup(PVGroup, Generic[T_Data]):
     setpoint = pvproperty[T_Data](doc="The read-write setpoint value")
 
 
-def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
-                        supported_async_libs=None):
+def template_arg_parser(
+    *,
+    desc: str,
+    default_prefix: str,
+    argv: Optional[List[str]] = None,
+    macros: Optional[Dict[str, str]] = None,
+    supported_async_libs: Optional[List[str]] = None
+) -> Tuple[argparse.ArgumentParser, Callable]:
     """
     Construct a template arg parser for starting up an IOC
 
@@ -2020,7 +2047,7 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
 
     Returns
     -------
-    parser : argparse.ArguementParser
+    parser : argparse.ArgumentParser
     split_args : callable[argparse.Namespace, Tuple[dict, dict]]
         A helper function to extract and split the 'standard' CL arguments.
         This function sets the logging level and returns the kwargs for
@@ -2069,7 +2096,7 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
                 help=f"Optional macro substitution, default: {default_value!r}"
             )
 
-    def split_args(args):
+    def split_args(args) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         Helper function to pull the standard information out of the
         parsed args.
@@ -2103,8 +2130,14 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
     return parser, split_args
 
 
-def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
-                   supported_async_libs=None):
+def ioc_arg_parser(
+    *,
+    desc: str,
+    default_prefix: str,
+    argv: Optional[List[str]] = None,
+    macros: Optional[Dict[str, str]] = None,
+    supported_async_libs: Optional[List[str]] = None
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     A reusable ArgumentParser for basic example IOCs.
 
@@ -2137,11 +2170,14 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
     return split_args(parser.parse_args())
 
 
-def run(pvdb, *,
-        module_name="caproto.asyncio.server",
-        interfaces=None,
-        log_pv_names=False,
-        startup_hook=None):
+def run(
+    pvdb: Dict[str, ChannelData],
+    *,
+    module_name: str = "caproto.asyncio.server",
+    interfaces: Optional[List[str]] = None,
+    log_pv_names: bool = False,
+    startup_hook: Optional[AinitHook] = None
+) -> None:
     """
     Run an IOC, given its PV database dictionary and async-library module name.
 
@@ -2166,5 +2202,8 @@ def run(pvdb, *,
     module = import_module(module_name)
     run = module.run
     return run(
-        pvdb, interfaces=interfaces, log_pv_names=log_pv_names,
-        startup_hook=startup_hook)
+        pvdb,
+        interfaces=interfaces,
+        log_pv_names=log_pv_names,
+        startup_hook=startup_hook,
+    )
