@@ -16,7 +16,7 @@ class ServerExit(Exception):
     ...
 
 
-class Event(asyncio.Event):
+class AsyncioEvent(asyncio.Event):
     "Implement the ``timeout`` keyword to wait(), as in threading.Event."
     async def wait(self, timeout=None):
         try:
@@ -26,9 +26,13 @@ class Event(asyncio.Event):
         return self.is_set()
 
 
+# Back-compat
+Event = AsyncioEvent
+
+
 class AsyncioAsyncLayer(AsyncLibraryLayer):
     name = 'asyncio'
-    Event = asyncio.Event
+    Event = AsyncioEvent
     library = asyncio
     sleep = staticmethod(asyncio.sleep)
     ThreadsafeQueue = AsyncioQueue

@@ -19,8 +19,8 @@ import time
 import typing
 from collections import OrderedDict, defaultdict, namedtuple
 from types import MethodType
-from typing import (Any, Callable, Dict, Generic, Optional, Protocol, Tuple,
-                    Type, TypeVar, Union)
+from typing import (Any, Callable, Dict, Generic, Optional, Tuple, Type,
+                    TypeVar, Union, cast)
 
 from caproto._log import _set_handler_with_logger, set_handler
 
@@ -31,6 +31,9 @@ from .. import (AccessRights, AlarmSeverity, AlarmStatus,
                 ChannelInteger, ChannelShort, ChannelString, ChannelType,
                 __version__, get_server_address_list)
 from .._backend import backend
+from .typing import (AsyncLibraryLayer, BoundGetter, BoundPutter, BoundScan,
+                     BoundShutdown, BoundStartup, Getter, Putter, Scan,
+                     Shutdown, Startup)
 
 if typing.TYPE_CHECKING:
     from .records import RecordFieldGroup
@@ -63,75 +66,8 @@ __all__ = ['AsyncLibraryLayer',
 T_Data = TypeVar("T_Data", bound="PvpropertyData")
 T_PVGroup = TypeVar("T_PVGroup", bound="PVGroup")
 T_pvproperty = TypeVar("T_pvproperty", bound="pvproperty")
-T_contra = TypeVar("T_contra", contravariant=True)
 T_SubGroup = TypeVar("T_SubGroup", bound="SubGroup")
 T_RecordFields = TypeVar("T_RecordFields", bound="RecordFieldGroup")
-
-
-class Getter(Protocol[T_contra]):
-    async def __call__(_self, self: PVGroup, instance: T_contra) -> Optional[Any]:
-        ...
-
-
-class Putter(Protocol[T_contra]):
-    async def __call__(
-        _self, self: PVGroup, instance: T_contra, value: Any
-    ) -> Optional[Any]:
-        ...
-
-
-class Startup(Protocol[T_contra]):
-    async def __call__(
-        _self, self: PVGroup, instance: T_contra, async_lib: AsyncLibraryLayer
-    ) -> None:
-        ...
-
-
-class Scan(Protocol[T_contra]):
-    async def __call__(
-        _self, self: PVGroup, instance: T_contra, async_lib: AsyncLibraryLayer
-    ) -> None:
-        ...
-
-
-class Shutdown(Protocol[T_contra]):
-    async def __call__(
-        _self, self: PVGroup, instance: T_contra, async_lib: AsyncLibraryLayer
-    ) -> None:
-        ...
-
-
-class BoundGetter(Protocol[T_contra]):
-    async def __call__(_self, instance: T_contra) -> Optional[Any]:
-        ...
-
-
-class BoundPutter(Protocol[T_contra]):
-    async def __call__(
-        _self, instance: T_contra, value: Any
-    ) -> Optional[Any]:
-        ...
-
-
-class BoundStartup(Protocol[T_contra]):
-    async def __call__(
-        _self, instance: T_contra, async_lib: AsyncLibraryLayer
-    ) -> None:
-        ...
-
-
-class BoundScan(Protocol[T_contra]):
-    async def __call__(
-        _self, instance: T_contra, async_lib: AsyncLibraryLayer
-    ) -> None:
-        ...
-
-
-class BoundShutdown(Protocol[T_contra]):
-    async def __call__(
-        _self, instance: T_contra, async_lib: AsyncLibraryLayer
-    ) -> None:
-        ...
 
 
 def _enum_instance_to_enum_strings(enum_class):
@@ -153,19 +89,6 @@ def _enum_instance_to_enum_strings(enum_class):
         get_enum_string(idx)
         for idx in range(max(enum_class) + 1)
     ]
-
-
-class AsyncLibraryLayer:
-    """
-    Library compatibility layer
-
-    To be subclassed/customized by async library layer for compatibility Then,
-    a single IOC written within the high-level server framework can potentially
-    use the same code base and still be run on either curio or trio, etc.
-    """
-    name = None
-    ThreadsafeQueue = None
-    library = None
 
 
 class PvpropertyData(Generic[T_RecordFields], ChannelData):
@@ -201,7 +124,7 @@ class PvpropertyData(Generic[T_RecordFields], ChannelData):
     field_inst: T_RecordFields
     fields: Dict[str, ChannelData]
     getter: Optional[BoundGetter]
-    group: PVGroup
+    group: Optional[PVGroup]
     log: logging.Logger
     name: str
     putter: Optional[BoundPutter]
@@ -256,17 +179,19 @@ class PvpropertyData(Generic[T_RecordFields], ChannelData):
             self.name = pvspec.attr or pvspec.name
             self.group = None
             self.log = logger or module_logger
-            self.getter = pvspec.get
-            self.putter = pvspec.put
-            self.startup = pvspec.startup
-            self.shutdown = pvspec.shutdown
-            self.scan = pvspec.scan
+            self.getter = cast(Optional[BoundGetter], pvspec.get)
+            self.putter = cast(Optional[BoundPutter], pvspec.put)
+            self.startup = cast(Optional[BoundStartup], pvspec.startup)
+            self.shutdown = cast(Optional[BoundShutdown], pvspec.shutdown)
+            self.scan = cast(Optional[BoundScan], pvspec.scan)
             if pvspec.startup is not None:
                 self.server_startup = self._server_startup
             if pvspec.scan is not None:
                 self.server_scan = self._server_scan
             if pvspec.shutdown is not None:
                 self.server_shutdown = self._server_shutdown
+
+        assert self.name is not None, "PV must have a name"
 
         if doc is not None:
             self.__doc__ = doc
@@ -974,7 +899,9 @@ class FieldSpec:
                 f'fields={self.fields}>')
 
 
-def get_record_class(record: Union[str, "RecordFieldGroup"]) -> "RecordFieldGroup":
+def get_record_class(
+    record: Union[str, Type["RecordFieldGroup"]]
+) -> Type["RecordFieldGroup"]:
     """Get the record class by name."""
     if isinstance(record, str):
         from .records import records
