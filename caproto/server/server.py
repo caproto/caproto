@@ -19,8 +19,8 @@ import time
 import typing
 from collections import OrderedDict, defaultdict, namedtuple
 from types import MethodType
-from typing import (Any, Callable, ClassVar, Dict, Generic, List, Optional,
-                    Tuple, Type, TypeVar, Union, cast)
+from typing import (Any, Callable, ClassVar, Dict, Generator, Generic, List,
+                    Optional, Tuple, Type, TypeVar, Union, cast)
 
 from caproto._log import _set_handler_with_logger, set_handler
 
@@ -591,7 +591,7 @@ class PVSpec(namedtuple('PVSpec',
         alarm_group: Optional[str] = None,
         read_only: Optional[bool] = None,
         doc: Optional[str] = None,
-        fields=None,
+        fields: Optional[FieldSpecItems] = None,
         scan=None,
         record: Optional[str] = None,
         cls_kwargs=None,
@@ -840,7 +840,9 @@ class FieldProxy:
     This class is primarily for internal use only.
     """
 
-    def __init__(self, field_spec, record_class, field_name):
+    def __init__(
+        self, field_spec: FieldSpec, record_class: RecordFieldGroup, field_name: str
+    ):
         self.field_spec = field_spec
         self.record_class = record_class
         self.field_name = field_name
@@ -870,7 +872,13 @@ class FieldProxy:
                 f'attr={self.field_name}>')
 
 
-class FieldSpec:
+# This is messier than messy - sorry
+# Each item is: ((field name: str, attribute name: str), callable hook)
+FieldSpecItem = Tuple[Tuple[str, str], Union[Getter, Putter, Startup, Shutdown, Scan]]
+FieldSpecItems = Tuple[FieldSpecItem, ...]
+
+
+class FieldSpec(Generic[T_RecordFields]):
     """
     A field specification for a pvproperty record.
 
@@ -882,7 +890,11 @@ class FieldSpec:
     This class is primarily for internal use only.
     """
 
-    def __init__(self, prop: pvproperty, *, record_type: RecordFieldGroup):
+    _prop: pvproperty
+    _record_type: T_RecordFields
+    _fields: Dict[Tuple[str, str], Union[Getter, Putter, Startup, Shutdown, Scan]]
+
+    def __init__(self, prop: pvproperty, *, record_type: T_RecordFields):
         self._prop = prop
         self._record_type = record_type
         self._fields = {}
@@ -905,14 +917,19 @@ class FieldSpec:
         return FieldProxy(self, self._record_type, attr)
 
     @property
-    def fields(self):
+    def fields(self) -> FieldSpecItems:
         return tuple(self._fields.items())
 
-    def _update(self, field, attr, value):
+    def _update(
+        self,
+        field: str,
+        attr: str,
+        value: Union[Getter, Putter, Startup, Shutdown, Scan],
+    ) -> None:
         self._fields[(field, attr)] = value
         self._prop.pvspec = self._prop.pvspec._replace(fields=self.fields)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (f'<FieldSpec record={self._record_type} '
                 f'fields={self.fields}>')
 
@@ -946,7 +963,7 @@ def _get_type_and_record_from_generic(
     return dtype, record_type
 
 
-class pvproperty(Generic[T_Data]):
+class pvproperty(Generic[T_Data, T_RecordFields]):
     """
     A property-like descriptor for specifying a PV in a `PVGroup`.
 
@@ -990,7 +1007,7 @@ class pvproperty(Generic[T_Data]):
     doc : str, optional
         Docstring associated with the property
 
-    fields : FieldSpec, optional
+    fields : list of FieldSpecItem, optional
         Specification for record fields
 
     **cls_kwargs :
@@ -1024,9 +1041,9 @@ class pvproperty(Generic[T_Data]):
         alarm_group: Optional[str] = None,
         doc: Optional[str] = None,
         read_only: Optional[bool] = None,
-        field_spec=None,
-        fields: Optional[FieldSpec] = None,
-        record: Optional[Union[str, Type[RecordFieldGroup]]] = None,
+        field_spec: Optional[FieldSpec] = None,
+        fields: Optional[FieldSpecItems] = None,
+        record: Optional[Union[str, Type[T_RecordFields]]] = None,
         **cls_kwargs
     ):
         self.attr_name = None  # to be set later
@@ -1045,8 +1062,12 @@ class pvproperty(Generic[T_Data]):
 
         if record is not None:
             self.field_spec = FieldSpec(self, record_type=get_record_class(record))
-        else:
+        elif field_spec is not None:
             self.field_spec = field_spec
+            record = field_spec.record_type
+            fields = fields or getattr(self.field_spec, "fields", None)
+        else:
+            self.field_spec = None
 
         self.pvspec = PVSpec(
             get=get,
@@ -1116,6 +1137,10 @@ class pvproperty(Generic[T_Data]):
 
     def __set_name__(self, owner: Type[PVGroup], name: str):
         """Descriptor method: auto-called to set the attribute name."""
+        if self.attr_name:
+            # Do not set the attribute name twice
+            return
+
         self.attr_name = name
 
         if self.pvspec.name is not None:
@@ -1265,13 +1290,13 @@ class pvproperty(Generic[T_Data]):
         return prop
 
     @property
-    def fields(self):
+    def fields(self) -> Type[T_RecordFields]:  # really: FieldSpec[T_RecordFields]:
         if self.field_spec is None:
             raise CaprotoAttributeError('No fields are allowed for this pvproperty')
         return self.field_spec
 
 
-class NestedPvproperty(pvproperty[T_Data]):
+class NestedPvproperty(pvproperty[T_Data, T_RecordFields]):
     """
     Nested pvproperty which allows decorator usage in parent class
 
@@ -1746,12 +1771,14 @@ def expand_macros(pv, macros):
 class PVGroupMeta(type):
     'Metaclass that finds all pvproperties'
     @classmethod
-    def __prepare__(self, name, bases):
+    def __prepare__(cls, name: str, bases: Tuple[type, ...]):
         # keep class dictionary items in order
         return OrderedDict()
 
     @staticmethod
-    def find_subgroups(dct):
+    def find_subgroups(
+        dct: Dict[str, Any]
+    ) -> Generator[Tuple[str, SubGroup], None, None]:
         for attr, value in dct.items():
             if attr.startswith('_'):
                 continue
@@ -1760,7 +1787,9 @@ class PVGroupMeta(type):
                 yield attr, value
 
     @staticmethod
-    def find_pvproperties(dct):
+    def find_pvproperties(
+        dct: Dict[str, Any]
+    ) -> Generator[Tuple[str, pvproperty], None, None]:
         for attr, value in dct.items():
             if attr.startswith('_'):
                 continue
@@ -1774,7 +1803,9 @@ class PVGroupMeta(type):
                 for sub_attr, value in subgroup_cls._pvs_.items():
                     yield '.'.join([attr, sub_attr]), value
 
-    def __new__(metacls, name, bases, dct):
+    def __new__(
+        metacls: PVGroupMeta, name: str, bases: Tuple[type, ...], dct: Dict[str, Any]
+    ):
         dct['_subgroups_'] = subgroups = OrderedDict()
         dct['_pvs_'] = pvs = OrderedDict()
 
@@ -1782,20 +1813,20 @@ class PVGroupMeta(type):
 
         # Propagate any subgroups/PVs from base classes
         for base in bases:
-            if hasattr(base, '_subgroups_'):
-                dct['_subgroups_'].update(**base._subgroups_)
-            if hasattr(base, '_pvs_'):
-                dct['_pvs_'].update(**base._pvs_)
+            base_subgroups = getattr(base, "_subgroups_", None)
+            if base_subgroups is not None:
+                subgroups.update(**base_subgroups)
+            base_pvs = getattr(base, "_pvs_", None)
+            if base_pvs is not None:
+                pvs.update(**base_pvs)
 
         for attr, prop in metacls.find_subgroups(dct):
             module_logger.debug('class %s subgroup attr %s: %r', name, attr,
                                 prop)
             subgroups[attr] = prop
-
-            # TODO a bit messy
             # propagate subgroups-of-subgroups to the top
             subgroup_cls = prop.group_cls
-            if hasattr(subgroup_cls, '_subgroups_'):
+            if subgroup_cls is not None and hasattr(subgroup_cls, "_subgroups_"):
                 for subattr, subgroup in subgroup_cls._subgroups_.items():
                     subgroups['.'.join((attr, subattr))] = subgroup
 
@@ -1891,7 +1922,14 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.CHAR: '',
     }
 
-    def __init__(self, prefix, *, macros=None, parent=None, name=None):
+    def __init__(
+        self,
+        prefix: str,
+        *,
+        macros: Optional[Dict[str, str]] = None,
+        parent: Optional[PVGroup] = None,
+        name: Optional[str] = None
+    ):
         self.parent = parent
         self.macros = macros if macros is not None else {}
         self.prefix = expand_macros(prefix, self.macros)
@@ -1970,9 +2008,10 @@ class PVGroup(metaclass=PVGroupMeta):
                 first_seen = self.pvdb[pvname]
                 if hasattr(first_seen, 'pvspec'):
                     first_seen = first_seen.pvspec.attr
-                raise CaprotoRuntimeError(f'{pvname} defined multiple times: '
-                                          f'now in attr: {attr} '
-                                          f'originally: {first_seen}')
+                raise CaprotoRuntimeError(
+                    f"{pvname} defined multiple times: now in attr: {attr} "
+                    f"originally: {first_seen}"
+                )
 
             # full pvname -> ChannelData instance
             self.pvdb[pvname] = channeldata
@@ -1983,10 +2022,10 @@ class PVGroup(metaclass=PVGroupMeta):
             # and a convenient map of attr -> pvname
             self.attr_to_pvname[attr] = pvname
 
-    async def group_read(self, instance):
+    async def group_read(self, instance: PvpropertyData):
         'Generic read called for channels without `get` defined'
 
-    async def group_write(self, instance, value):
+    async def group_write(self, instance: PvpropertyData, value: Any):
         'Generic write called for channels without `put` defined'
         self.log.debug('group_write: %s = %s', instance.pvspec.attr, value)
         return value
@@ -2009,14 +2048,14 @@ class _StateUpdateContext:
             prop.post_state_change(self.state, self.value)
 
 
-class _ReadWriteSubGroup(PVGroup, Generic[T_Data]):
+class _ReadWriteSubGroup(PVGroup, Generic[T_Data, T_RecordFields]):
     """
     Annotation helper for :func:`get_pv_pair_wrapper`
     """
     # Stand-in for a SubGroup interface of sorts - pyright fails to find
     # readback/setpoint with SubGroup as a base class)
-    readback = pvproperty[T_Data](doc="The read-only readback value")
-    setpoint = pvproperty[T_Data](doc="The read-write setpoint value")
+    readback = pvproperty[T_Data, T_RecordFields](doc="The read-only readback value")
+    setpoint = pvproperty[T_Data, T_RecordFields](doc="The read-write setpoint value")
 
 
 def template_arg_parser(
