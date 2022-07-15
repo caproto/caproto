@@ -4,7 +4,7 @@ Install Caproto
 
 You can install caproto using pip or from source.
 
-First verify that you have Python 3.6+.
+First verify that you have Python 3.8+.
 
 .. code-block:: bash
 
@@ -126,43 +126,3 @@ To build the documentation:
 .. code-block:: bash
 
     make -C doc html
-
-Installation on iOS
-===================
-
-`Pythonista <http://omz-software.com/pythonista/>`_ brings support for Python
-3.6 to iOS, meaning that you can run caproto rather easily right from your
-iPhone or iPad.
-
-To get started on iOS:
-
-1. Purchase and install Pythonista from the app store.
-2. Install `StaSh <https://github.com/ywangd/stash>`_ in Pythonista by creating
-   a new script and running:
-
-.. code-block:: python
-
-   import requests as r; exec(r.get('https://bit.ly/get-stash').text)
-
-3. Restart Pythonista and launch a StaSh shell. Install caproto with pip:
-
-.. code-block:: bash
-
-   $ pip install caproto
-
-4. Open an example IOC and give it a try. To find the caproto examples, navigate to
-   "Python Modules > site-packages-3 > caproto > ioc_examples > simple.py"
-
-5. Tap the play button to run it.  From another computer on the same WiFi
-   network, you should then be able to access the PVs served directly from your
-   iOS device:
-
-.. code-block:: bash
-
-    $ caproto-get simple:A
-    simple:A                   [1]
-
-6. Some example IOCs are available in a separate repository, including access to the
-   accelerometer, GPS, and text-to-speech engine. See
-   `klauer/caproto_ios <https://github.com/klauer/caproto_ios>`_ for more
-   information.
