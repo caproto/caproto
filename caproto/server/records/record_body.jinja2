@@ -1,7 +1,7 @@
 {% for f in rec.fields | sort(attribute='sort_id') %}
 {% if f.dtype %}
     {%+ if f.comment %}# {% endif %}{{ f.attr }} = pvproperty(name='{{ f.field_name }}',
-    {%+ if f.comment %}# {% endif %}     dtype=ChannelType.{{ f.dtype }},
+    {%+ if f.comment %}# {% endif %}     dtype={{ f.pvproperty_cls }},
     {%+ if f.comment %}# {% endif %}     {% for kwarg, value in f.kwargs.items() -%}
                                          {{ kwarg }}={{ value }}
                                          {%- if not loop.last %},{% endif -%}

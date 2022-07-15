@@ -5,6 +5,7 @@ import re
 
 from .._data import (ChannelByte, ChannelChar, ChannelDouble, ChannelEnum,
                      ChannelFloat, ChannelInteger, ChannelString)
+from . import server
 from .menus import menus
 from .records import RecordFieldGroup, get_record_registry, mixins
 from .server import PVGroup, pvfunction
@@ -280,6 +281,27 @@ DTYPE_OVERRIDES = {
     'DBF_USHORT': 'INT',
 }
 
+DBD_TO_PVPROPERTY = {
+    'DBF_DEVICE': server.PvpropertyEnum,
+    'DBF_FLOAT': server.PvpropertyFloat,
+    'DBF_DOUBLE': server.PvpropertyDouble,
+    'DBF_FWDLINK': server.PvpropertyString,
+    'DBF_INLINK': server.PvpropertyString,
+    'DBF_INT64': server.PvpropertyInteger,
+    'DBF_LONG': server.PvpropertyInteger,
+    'DBF_MENU': server.PvpropertyEnum,
+    'DBF_ENUM': server.PvpropertyEnum,
+    'DBF_OUTLINK': server.PvpropertyString,
+    'DBF_SHORT': server.PvpropertyShort,
+    'DBF_STRING': server.PvpropertyString,
+    'DBF_CHAR': server.PvpropertyChar,
+
+    # unsigned types which don't actually have ChannelType equivalents:
+    'DBF_UCHAR': server.PvpropertyByte,  # TODO
+    'DBF_ULONG': server.PvpropertyInteger,
+    'DBF_USHORT': server.PvpropertyShort,
+}
+
 FIELD_OVERRIDE_OK = {'DTYP', }
 
 
@@ -305,15 +327,19 @@ def record_to_field_info(record_type, dbd_info):
         prompt = field_info['prompt']
 
         # alarm = parent.alarm
+        pvproperty_class = DBD_TO_PVPROPERTY[type_]
         kwargs = {}
 
         if 'value' in field_info:
             kwargs['value'] = field_info['value']
 
         if type_ == 'DBF_STRING' and size > 0:
-            type_ = 'DBF_UCHAR'
+            # type_ = 'DBF_UCHAR'
+            pvproperty_class = server.PvpropertyChar
             kwargs['max_length'] = size
             kwargs['report_as_string'] = True
+            if "value" not in kwargs:
+                kwargs["value"] = '""'
         elif size > 1:
             kwargs['max_length'] = size
 
@@ -325,15 +351,14 @@ def record_to_field_info(record_type, dbd_info):
                                       '.get_string_tuple()')
 
         if prompt:
-            kwargs['doc'] = repr(prompt)
+            kwargs['doc'] = repr(prompt.strip())
 
         if field_info.get('special') == 'SPC_NOMOD':
             kwargs['read_only'] = True
 
-        type_class = DBD_TYPE_INFO[type_]
         attr_name = get_attr_name_from_dbd_prompt(
             record_type, field_name, prompt)
-        yield attr_name, type_class, kwargs, field_info
+        yield attr_name, pvproperty_class, kwargs, field_info
 
 
 def get_attr_name_from_dbd_prompt(record_type, field_name, prompt):
@@ -441,7 +466,7 @@ MIXIN_SPECS = {
 def get_initial_field_value(value, dtype):
     'Get caproto pvproperty value from "initial(value)" portion of dbd file'
     if isinstance(value, int) and dtype in ('CHAR', 'STRING'):
-        return f'chr({value})'
+        return f'b"{value}"'
     if dtype in ('ENUM', ):
         if value == 65535:
             # invalid enum setting -> valid enum setting
@@ -474,6 +499,7 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
         result['base_class'] = 'PVGroup'
         result['record_type'] = None
         existing_record = RecordFieldGroup
+        field_info = {}
     else:
         field_info = dbd_info[record_type]
         val_type = field_info.get('VAL', {'type': 'DBF_NOACCESS'})['type']
@@ -505,10 +531,16 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
             kwargs['value'] = get_initial_field_value(finfo['initial'], dtype)
 
         field_name = finfo['field']  # as in EPICS
+        if kwargs.get("read_only", False):
+            pvprop_cls_name = f"{cls.__name__}RO"
+        else:
+            pvprop_cls_name = cls.__name__
+
         fields_by_attr[attr_name] = dict(
             attr=attr_name,
             field_name=field_name,
             dtype=dtype,
+            pvproperty_cls=pvprop_cls_name,
             kwargs=kwargs,
             comment=comment,
             sort_id=_get_sort_id(field_name, existing_field_list),
