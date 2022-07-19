@@ -812,7 +812,7 @@ class SharedBroadcaster:
                                 "automatically begin attempting to reconnect "
                                 "to a responsive server.",
                                 *address, circuit_manager)
-                            circuit_manager.disconnect()
+                            circuit_manager._disconnected()
                     checking.pop(address)
                 # else:
                 #     # We are still waiting to give the server time to respond
