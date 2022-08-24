@@ -4,7 +4,7 @@ Install Caproto
 
 You can install caproto using pip or from source.
 
-First verify that you have Python 3.6+.
+First verify that you have Python 3.8+.
 
 .. code-block:: bash
 
