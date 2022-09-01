@@ -12,6 +12,7 @@ import logging
 import numbers
 import time
 from enum import IntEnum, IntFlag
+from typing import ClassVar, Tuple
 
 from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_ENUM_STATES,
                          MAX_ENUM_STRING_SIZE, MAX_STRING_SIZE, MAX_UNITS_SIZE)
@@ -238,7 +239,7 @@ class DbrStringArray(collections.UserList):
 class DbrTypeBase(ctypes.BigEndianStructure):
     '''Base class for all DBR types'''
     _pack_ = 1
-    info_fields = ()
+    info_fields: ClassVar[Tuple[str, ...]] = ()
 
     def to_dict(self):
         d = {field: getattr(self, field)
@@ -344,11 +345,22 @@ class StatusTypeBase(DbrTypeBase):
 
 class GraphicControlBase(DbrTypeBase):
     '''DBR_CTRL_* and DBR_GR_* base'''
-    graphic_fields = ('upper_disp_limit', 'lower_disp_limit',
-                      'upper_alarm_limit', 'upper_warning_limit',
-                      'lower_warning_limit', 'lower_alarm_limit')
-    control_fields = ('upper_ctrl_limit', 'lower_ctrl_limit')
-    info_fields = ('status', 'severity', ) + graphic_fields
+    graphic_fields: ClassVar[Tuple[str, ...]] = (
+        "upper_disp_limit",
+        "lower_disp_limit",
+        "upper_alarm_limit",
+        "upper_warning_limit",
+        "lower_warning_limit",
+        "lower_alarm_limit",
+    )
+    control_fields: ClassVar[Tuple[str, ...]] = (
+        "upper_ctrl_limit",
+        "lower_ctrl_limit",
+    )
+    info_fields: ClassVar[Tuple[str, ...]] = (
+        "status",
+        "severity",
+    ) + graphic_fields
 
 
 class GraphicControlUnits(GraphicControlBase):

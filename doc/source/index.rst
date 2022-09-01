@@ -32,7 +32,7 @@ time, caproto is suitable for use at large experimental facilities.
 Try caproto in four lines
 ==========================
 
-First verify that you have Python 3.6+.
+First verify that you have Python 3.8+.
 
 .. code-block:: bash
 
@@ -129,7 +129,7 @@ Caproto offered preliminary pvAccess support, but it has since been removed.
 Vital Statistics
 ================
 
-* Requirements: Python 3.6+ (no other required dependencies!)
+* Requirements: Python 3.8+ (no other required dependencies!)
 * License: 3-clause BSD
 
 Acknowledgement

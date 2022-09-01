@@ -1,7 +1,7 @@
 import copy
 import logging
 import sys
-from typing import Dict, Type
+from typing import Dict, Type, TypeVar
 
 from ..._constants import MAX_ENUM_STRING_SIZE
 from ..server import PVGroup, pvproperty
@@ -10,7 +10,10 @@ logger = logging.getLogger(__name__)
 records = {}
 
 
-def register_record(cls: Type[PVGroup]) -> Type[PVGroup]:
+T = TypeVar("T", bound="PVGroup")
+
+
+def register_record(cls: Type[T]) -> Type[T]:
     """Register a record type to be used with pvproperty mock_record."""
     if not issubclass(cls, PVGroup):
         raise ValueError(f"Class {cls.__name__} must subclass from PVGroup.")

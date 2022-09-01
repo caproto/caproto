@@ -8,6 +8,7 @@ import time
 import weakref
 from collections import defaultdict, namedtuple
 from collections.abc import Iterable
+from typing import Any
 
 from ._backend import backend
 from ._commands import parse_metadata
@@ -267,6 +268,7 @@ class ChannelData:
         record or be set to something arbitrary.  Defaults to 'caproto'.
     """
     data_type = ChannelType.LONG
+    default_value: Any = 0
     _compatible_array_types = {}
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,

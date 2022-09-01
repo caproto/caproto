@@ -1,13 +1,14 @@
 import inspect
 import os.path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Optional, Type, Union
 
 import caproto
 
 from ..server import PVGroup, SubGroup, pvproperty
+from ..server.records import RecordFieldGroup
 
 
-def get_class_info(cls: type) -> Dict[str, str]:
+def get_class_info(cls: type) -> Optional[Dict[str, Any]]:
     """
     Get class information in a jinja-friendly way.
 
@@ -168,13 +169,17 @@ def _get_pvgroup_info(cls: Type[PVGroup]) -> dict:
     )
 
 
-def get_record_info(record_type) -> Dict[str, Any]:
+def get_record_info(
+    record_type: Union[str, Type[RecordFieldGroup]]
+) -> Optional[Dict[str, Any]]:
     """Get information from a given record type."""
     if record_type is None:
         return None
 
-    if record_type == 'base':
-        cls = caproto.server.records.RecordFieldGroup
+    if inspect.isclass(record_type):
+        cls = record_type
+    elif record_type == 'base':
+        cls = RecordFieldGroup
     else:
         cls = caproto.server.records.records[record_type]
 
