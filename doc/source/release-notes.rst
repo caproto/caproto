@@ -2,22 +2,22 @@
 Release History
 ***************
 
-v0.9.0 (2022-??-??)
+v1.0.0 (2022-09-01)
 ===================
 
-- Python 3.6 and Python 3.7 support has been dropped.
-- Python 3.8 through Python 3.10 are now targeted for support.
+Breaking Changes
+----------------
 
-Changed
--------
-
-- pvAccess support has been removed.
+- Python 3.6 and Python 3.7 support has been dropped. Python 3.8 through Python
+  3.10 are now targeted for support.
+- PVAccess support has been removed, and caproto returns to being solely an
+  EPICS Channel Access library.
 - Top-level utility functions for accessing pvAccess environment variables
   are now deprecated and will be reverted to pre-pvAccess (no protocol argument
   allowed) signatures in a future release.
 
-Fixed
------
+Added / Fixed
+-------------
 
 - Fixes for all Windows clients, servers, and the repeater relating to PV
   searches. ``recvfrom`` was occasionally raising ``ConnectionResetError``,
@@ -30,6 +30,21 @@ Fixed
   to a specific interface meant that on Windows the repeater could not use
   its client-is-alive detection mechanism by binding to the client port as
   the bind would always succeed.
+- Updated method ``get_data_class()`` in PVSpec so that type maps are correct for
+  read-only.
+- Use RotatingFileManager filename when restoring autosave.
+- Provide defaults for user limits in motor record simulation.
+- pvproperty no longer broken when decorating methods with docstring.
+- Type annotations have been added to ``caproto.server.server``.
+    - ``pvproperty`` and ``PVSpec`` may now use the data class directly, instead of
+      requiring an internal mapping of data type to class. For example,
+      ``pvproperty(..., dtype=PvpropertyInteger)`` is allowed alongside the
+      existing and less explicit ``pvproperty(..., dtype=int)``.
+    - Using such classes directly comes with the added benefit of type
+      inference with your IDE's language server / static analyzer. pyright and
+      similar should be much happier with caproto IOCs that use ``pvproperty``
+      such that linting of attributes on pvproperty instances, features as "Go
+      to source", and code completion are now possible.
 
 Development
 -----------
