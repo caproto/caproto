@@ -1038,8 +1038,8 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
 
     readings = {}
     pending_pvs = list(pvs)
-    t = time.time()
-    while pending_pvs and time.time() - t < timeout:
+    t = time.monotonic()
+    while pending_pvs and time.monotonic() - t < timeout:
         for pv in list(pending_pvs):
             if pv.connected:
                 readings[pv] = pv.read(data_type='control')
