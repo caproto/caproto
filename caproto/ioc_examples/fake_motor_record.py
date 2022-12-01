@@ -2,7 +2,6 @@
 from textwrap import dedent
 
 from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
-from caproto.server.records import MotorFields
 
 
 async def broadcast_precision_to_fields(record):

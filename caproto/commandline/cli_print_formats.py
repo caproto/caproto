@@ -129,7 +129,7 @@ def gen_data_format(args=None, data=None):
     df.format = "g"
 
     # 'data' contains an array of floats
-    if(isinstance(data[0], float)):
+    if isinstance(data[0], float):
         # Check if any of the format specification arguments were passed
         if args.float_e is not None:
             df.format = ".{}e".format(args.float_e)
@@ -157,11 +157,11 @@ def gen_data_format(args=None, data=None):
             df.float_round = True
 
     # 'data' contains a list (or array) of strings
-    if(isinstance(data[0], str) or isinstance(data[0], bytes)):
+    if isinstance(data[0], str) or isinstance(data[0], bytes):
         df.format = "s"
 
     # 'data' contains an array of integers
-    if(isinstance(data[0], numbers.Integral)):
+    if isinstance(data[0], numbers.Integral):
         if args.array_as_str:  # Format array as string
             df.format = 's'
         else:  # Print as array
@@ -236,10 +236,10 @@ def format_response_data(data=None, data_fmt=None):
 
     # Strings (or arrays of strings) are returned in the form of lists
     #    of type 'bytes'. They need to be converted to regular strings for printing.
-    if(isinstance(data[0], bytes)):
+    if isinstance(data[0], bytes):
         data = [v.decode() for v in data]
     # Round floating point numbers and convert to nearest integers (if required)
-    if(isinstance(data[0], float) and data_fmt.float_round):
+    if isinstance(data[0], float) and data_fmt.float_round:
         data = [int(round(v)) for v in data]
     if isinstance(data[0], numbers.Integral) and data_fmt.format == 's':
         return ''.join(chr(c) for c in data)

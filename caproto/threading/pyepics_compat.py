@@ -1025,7 +1025,7 @@ def cainfo(pvname, print_out=True):
 
 
 def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
-               context=None):
+               context=None, raises=False):
     """get values for a list of PVs
 
     This does not maintain PV objects, and works as fast
@@ -1038,12 +1038,18 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
 
     readings = {}
     pending_pvs = list(pvs)
-    while pending_pvs:
+    t = time.monotonic()
+    while pending_pvs and time.monotonic() - t < timeout:
         for pv in list(pending_pvs):
             if pv.connected:
                 readings[pv] = pv.read(data_type='control')
                 pending_pvs.remove(pv)
         time.sleep(0.01)
+
+    if raises and pending_pvs:
+        raise CaprotoTimeoutError(f'{pending_pvs[0].name} failed to connect within '
+                                  f'{timeout} seconds '
+                                  f'(caproto={pending_pvs[0]})')
 
     get_kw = dict(as_string=as_string,
                   as_numpy=as_numpy,
@@ -1051,6 +1057,9 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
                   )
 
     def final_get(pv):
+        if pv in pending_pvs:
+            return None
+
         # Use "DBR_CTRL_*" so that we can get enum strings, if necessary.
         full_type = field_types['control'][pv.channel.native_data_type]
         enum_strings = getattr(readings[pv].metadata, "enum_strings", None)
