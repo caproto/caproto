@@ -154,8 +154,8 @@ class Lakeshore336Sim(PVGroup):
         self._sample = ThermalMaterial()
 
         self._temperature_controller = PIDController(
-            lambda: sample.temperature,
-            sample.set_heater_power,
+            lambda: self._sample.temperature,
+            self._sample.set_heater_power,
             Kp=1,
             Ki=0.1,
             Kd=0.05,
@@ -169,12 +169,30 @@ class Lakeshore336Sim(PVGroup):
         doc="PID parameter Kp"
     )
 
+    @Kp.getter
+    async def Kp(self, instance):
+        return self._temperature_controller.Kp
+
+    @Kp.putter
+    async def Kp(self, instance, value):
+        self._temperature_controller.Kp = value
+        return value
+
     Ki = pvproperty(
         value=0,
         dtype=float,
         name='Ki',
         doc="PID parameter Ki"
     )
+
+    @Ki.getter
+    async def Ki(self, instance):
+        return self._temperature_controller.Ki
+
+    @Ki.putter
+    async def Ki(self, instance, value):
+        self._temperature_controller.Ki = value
+        return value
 
     Kd = pvproperty(
         value=0,
@@ -183,12 +201,30 @@ class Lakeshore336Sim(PVGroup):
         doc="PID parameter Kd"
     )
 
+    @Kd.getter
+    async def Kd(self, instance):
+        return self._temperature_controller.Kd
+
+    @Kd.putter
+    async def Kd(self, instance, value):
+        self._temperature_controller.Kd = value
+        return value
+
     setpoint = pvproperty(
         value=100,
         dtype=float,
         name='setpoint',
         doc="temperature setpoint"
     )
+
+    @setpoint.getter
+    async def setpoint(self, instance):
+        return self._temperature_controller.setpoint
+
+    @setpoint.putter
+    async def setpoint(self, instance, value):
+        self._temperature_controller.setpoint = value
+        return value
 
     feedback = pvproperty(
         value=100,
@@ -197,12 +233,20 @@ class Lakeshore336Sim(PVGroup):
         doc="temperature feedback"
     )
 
+    @feedback.getter
+    async def feedback(self, instance):
+        return self._temperature_controller.feedback
+
     output = pvproperty(
         value=100,
         dtype=float,
         name='output',
         doc="output value"
     )
+
+    @output.getter
+    async def output(self, instance):
+        return self._temperature_controller.output
 
 
 if __name__ == '__main__':
