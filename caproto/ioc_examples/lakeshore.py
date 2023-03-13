@@ -75,8 +75,12 @@ class ThermalMaterial:
 
 
 class PIDController(PID):
-    def __init__(self, get_feedback, set_output, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, get_feedback, set_output, ramp_rate=None,
+                 setpoint=150,
+                 *args, **kwargs):
+        self._setpoint = setpoint
+        self.ramp_rate = ramp_rate
+        super().__init__(setpoint=setpoint, *args, **kwargs)
         self._get_feedback = get_feedback
         self._set_output = set_output
         self._feedback = None
@@ -93,10 +97,21 @@ class PIDController(PID):
     def feedback(self):
         return self._feedback
 
+    @property
+    def setpoint(self):
+        return self._setpoint
+
+    @setpoint.setter
+    def setpoint(self, value):
+        self._setpoint_target = value
+        if self.ramp_rate is None:
+            self._setpoint = value
+
     def stop(self):
-        self.run = False
+        self._run = False
 
     def _executor(self):
+        iteration_time = 0.1
         while self._run:
             self._feedback = self._get_feedback()
             self._output = self.__call__(self._get_feedback())
@@ -105,42 +120,55 @@ class PIDController(PID):
             self.history["setpoint"].append(self.setpoint)
             self.history["timestamp"].append(time.time())
             self._set_output(self._output)
-            time.sleep(0.1)
+
+            # Ramping logic.
+            remaining = (self._setpoint_target - self.setpoint)
+            if isinstance(self.ramp_rate, (int, float)):
+                if remaining > 0:
+                    self._setpoint += min(self.ramp_rate*iteration_time, abs(remaining))
+                elif remaining < 0:
+                    self._setpoint -= min(self.ramp_rate*iteration_time, abs(remaining))
+            elif self.ramp_rate is None and remaining != 0:
+                self._setpoint = self._setpoint_target
+
+            time.sleep(iteration_time)
 
 
 """
-    # Temperature Controller Example Code
+# Temperature Controller Example Code
 
-    import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from caproto.ioc_examples.lakeshore import PIDController, ThermalMaterial
 
-    sample = ThermalMaterial()
-    setpoint = 150
+sample = ThermalMaterial()
+setpoint = 150
 
-    temperature_controller = PIDController(
-        lambda: sample.temperature,
-        sample.set_heater_power,
-        Kp=1,
-        Ki=0.1,
-        Kd=0.05,
-        setpoint=setpoint,
-    )
+temperature_controller = PIDController(
+    lambda: sample.temperature,
+    sample.set_heater_power,
+    Kp=1,
+    Ki=0.1,
+    Kd=0.05,
+    ramp_rate=1,
+    setpoint=setpoint,
+)
 
-    def update(i):
-        x_values = temperature_controller.history['timestamp']
-        plt.cla()
-        plt.plot(x_values, temperature_controller.history['feedback'])
-        plt.plot(x_values, temperature_controller.history['output'])
-        plt.plot(x_values, temperature_controller.history['setpoint'])
-        plt.xlabel('time')
-        plt.ylabel('temperature')
-        plt.title('Temperature Controller')
-        plt.gcf().autofmt_xdate()
-        plt.tight_layout()
-
-    ani = FuncAnimation(plt.gcf(), update, 1000)
+def update(i):
+    x_values = temperature_controller.history['timestamp']
+    plt.cla()
+    plt.plot(x_values, temperature_controller.history['feedback'])
+    plt.plot(x_values, temperature_controller.history['output'])
+    plt.plot(x_values, temperature_controller.history['setpoint'])
+    plt.xlabel('time')
+    plt.ylabel('temperature')
+    plt.title('Temperature Controller')
+    plt.gcf().autofmt_xdate()
     plt.tight_layout()
-    plt.amplhow(block=False)
+
+ani = FuncAnimation(plt.gcf(), update, 1000)
+plt.tight_layout()
+plt.show(block=False)
 """
 
 
