@@ -108,6 +108,41 @@ class PIDController(PID):
             time.sleep(0.1)
 
 
+"""
+    # Temperature Controller Example Code
+
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    sample = ThermalMaterial()
+    setpoint = 150
+
+    temperature_controller = PIDController(
+        lambda: sample.temperature,
+        sample.set_heater_power,
+        Kp=1,
+        Ki=0.1,
+        Kd=0.05,
+        setpoint=setpoint,
+    )
+
+    def update(i):
+        x_values = temperature_controller.history['timestamp']
+        plt.cla()
+        plt.plot(x_values, temperature_controller.history['feedback'])
+        plt.plot(x_values, temperature_controller.history['output'])
+        plt.plot(x_values, temperature_controller.history['setpoint'])
+        plt.xlabel('time')
+        plt.ylabel('temperature')
+        plt.title('Temperature Controller')
+        plt.gcf().autofmt_xdate()
+        plt.tight_layout()
+
+    ani = FuncAnimation(plt.gcf(), update, 1000)
+    plt.tight_layout()
+    plt.amplhow(block=False)
+"""
+
 class Lakeshore336Sim(PVGroup):
     """
     Simulated Lakeshore IOC.
@@ -115,6 +150,17 @@ class Lakeshore336Sim(PVGroup):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self._sample = ThermalMaterial()
+
+        self._temperature_controller = PIDController(
+            lambda: sample.temperature,
+            sample.set_heater_power,
+            Kp=1,
+            Ki=0.1,
+            Kd=0.05,
+            setpoint=150,
+        )
 
     Kp = pvproperty(
         value=0,
@@ -167,37 +213,3 @@ if __name__ == '__main__':
     print('PVs:', list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
 
-"""
-    # Example Code
-
-    import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation
-
-    sample = ThermalMaterial()
-    setpoint = 150
-
-    temperature_controller = PIDController(
-        lambda: sample.temperature,
-        sample.set_heater_power,
-        Kp=1,
-        Ki=0.1,
-        Kd=0.05,
-        setpoint=setpoint,
-    )
-
-    def update(i):
-        x_values = temperature_controller.history['timestamp']
-        plt.cla()
-        plt.plot(x_values, temperature_controller.history['feedback'])
-        plt.plot(x_values, temperature_controller.history['output'])
-        plt.plot(x_values, temperature_controller.history['setpoint'])
-        plt.xlabel('time')
-        plt.ylabel('temperature')
-        plt.title('Temperature Controller')
-        plt.gcf().autofmt_xdate()
-        plt.tight_layout()
-
-    ani = FuncAnimation(plt.gcf(), update, 1000)
-    plt.tight_layout()
-    plt.amplhow(block=False)
-"""
