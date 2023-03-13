@@ -82,7 +82,7 @@ class PIDController(PID):
         self._feedback = None
         self._output = None
         self._run = True
-        self.history = {'output':[], 'feedback':[], 'setpoint':[], 'timestamp':[]}
+        self.history = {"output": [], "feedback": [], "setpoint": [], "timestamp": []}
         threading.Thread(target=self._executor).start()
 
     @property
@@ -100,10 +100,10 @@ class PIDController(PID):
         while self._run:
             self._feedback = self._get_feedback()
             self._output = self.__call__(self._get_feedback())
-            self.history['output'].append(self._output)
-            self.history['feedback'].append(self._feedback)
-            self.history['setpoint'].append(self.setpoint)
-            self.history['timestamp'].append(time.time())
+            self.history["output"].append(self._output)
+            self.history["feedback"].append(self._feedback)
+            self.history["setpoint"].append(self.setpoint)
+            self.history["timestamp"].append(time.time())
             self._set_output(self._output)
             time.sleep(0.1)
 
@@ -143,6 +143,7 @@ class PIDController(PID):
     plt.amplhow(block=False)
 """
 
+
 class Lakeshore336Sim(PVGroup):
     """
     Simulated Lakeshore IOC.
@@ -162,12 +163,7 @@ class Lakeshore336Sim(PVGroup):
             setpoint=150,
         )
 
-    Kp = pvproperty(
-        value=0,
-        dtype=float,
-        name='Kp',
-        doc="PID parameter Kp"
-    )
+    Kp = pvproperty(value=0, dtype=float, name="Kp", doc="PID parameter Kp")
 
     @Kp.getter
     async def Kp(self, instance):
@@ -178,12 +174,7 @@ class Lakeshore336Sim(PVGroup):
         self._temperature_controller.Kp = value
         return value
 
-    Ki = pvproperty(
-        value=0,
-        dtype=float,
-        name='Ki',
-        doc="PID parameter Ki"
-    )
+    Ki = pvproperty(value=0, dtype=float, name="Ki", doc="PID parameter Ki")
 
     @Ki.getter
     async def Ki(self, instance):
@@ -194,12 +185,7 @@ class Lakeshore336Sim(PVGroup):
         self._temperature_controller.Ki = value
         return value
 
-    Kd = pvproperty(
-        value=0,
-        dtype=float,
-        name='Kd',
-        doc="PID parameter Kd"
-    )
+    Kd = pvproperty(value=0, dtype=float, name="Kd", doc="PID parameter Kd")
 
     @Kd.getter
     async def Kd(self, instance):
@@ -211,10 +197,7 @@ class Lakeshore336Sim(PVGroup):
         return value
 
     setpoint = pvproperty(
-        value=100,
-        dtype=float,
-        name='setpoint',
-        doc="temperature setpoint"
+        value=100, dtype=float, name="setpoint", doc="temperature setpoint"
     )
 
     @setpoint.getter
@@ -227,33 +210,24 @@ class Lakeshore336Sim(PVGroup):
         return value
 
     feedback = pvproperty(
-        value=100,
-        dtype=float,
-        name='feedback',
-        doc="temperature feedback"
+        value=100, dtype=float, name="feedback", doc="temperature feedback"
     )
 
     @feedback.getter
     async def feedback(self, instance):
         return self._temperature_controller.feedback
 
-    output = pvproperty(
-        value=100,
-        dtype=float,
-        name='output',
-        doc="output value"
-    )
+    output = pvproperty(value=100, dtype=float, name="output", doc="output value")
 
     @output.getter
     async def output(self, instance):
         return self._temperature_controller.output
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
-        default_prefix='Lakeshore336Sim:',
-        desc="Lakeshore336Sim IOC")
+        default_prefix="Lakeshore336Sim:", desc="Lakeshore336Sim IOC"
+    )
     ioc = Lakeshore336Sim(**ioc_options)
-    print('PVs:', list(ioc.pvdb))
+    print("PVs:", list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
-
