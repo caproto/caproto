@@ -1,8 +1,13 @@
+import asyncio
+import contextvars
 import functools
 import time
 import threading
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 from simple_pid import PID
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 
 class ThermalMaterial:
@@ -178,6 +183,8 @@ plt.tight_layout()
 plt.show(block=False)
 """
 
+internal_process = contextvars.ContextVar('internal_process',
+                                          default=False)
 
 def no_reentry(func):
     @functools.wraps(func)
@@ -198,9 +205,8 @@ class Lakeshore336Sim(PVGroup):
     Simulated Lakeshore IOC.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, plot=True, **kwargs):
         super().__init__(*args, **kwargs)
-
         self._sample = ThermalMaterial()
 
         self._temperature_controller = PIDController(
@@ -211,6 +217,7 @@ class Lakeshore336Sim(PVGroup):
             Kd=0.05,
             setpoint=150,
         )
+
 
     Kp = pvproperty(value=0, dtype=float, name="Kp", doc="PID parameter Kp")
 
@@ -270,7 +277,7 @@ class Lakeshore336Sim(PVGroup):
         instance.ev.clear()
         try:
             self._temperature_controller.setpoint = value
-            await wait_for_completion()
+            await self.wait_for_completion()
         finally:
             instance.ev.set()
         return self._temperature_controller.setpoint
@@ -295,11 +302,20 @@ class Lakeshore336Sim(PVGroup):
     async def output(self, instance):
         return self._temperature_controller.output
 
+from ophyd import EpicsSignal, EpicsSignalRO, Device
+from ophyd import Component as Cpt
+
+class Lakeshore(Device):
+    feedback = Cpt(EpicsSignalRO, ':feedback')
+    setpoint = Cpt(EpicsSignal, ':setpoint')
+    ramp_rate = Cpt(EpicsSignal, 'ramp_rate')
+
 
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
         default_prefix="Lakeshore336Sim:", desc="Lakeshore336Sim IOC"
     )
     ioc = Lakeshore336Sim(**ioc_options)
+
     print("PVs:", list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
