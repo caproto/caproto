@@ -1,6 +1,6 @@
+import functools
 import time
 import threading
-
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 from simple_pid import PID
 
@@ -258,6 +258,8 @@ class Lakeshore336Sim(PVGroup):
             ramping = self._temperature_controller.ramping
             if old_ramping and not ramping:
                 return
+            else:
+                old_ramping = ramping
 
     @setpoint.getter
     async def setpoint(self, instance):
