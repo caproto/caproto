@@ -105,6 +105,7 @@ class PIDController(PID):
     @setpoint.setter
     def setpoint(self, value):
         self._setpoint_target = value
+        self._ramping = True
         if self.ramp_rate is None:
             self._setpoint = value
 
@@ -253,13 +254,9 @@ class Lakeshore336Sim(PVGroup):
 
     async def wait_for_completion(self):
         while True:
-            old_ramping = self._temperature_controller.ramping
-            await asyncio.sleep(0.1)
-            ramping = self._temperature_controller.ramping
-            if old_ramping and not ramping:
+            if not self._temperature_controller.ramping:
                 return
-            else:
-                old_ramping = ramping
+            await asyncio.sleep(0.1)
 
     @setpoint.getter
     async def setpoint(self, instance):
