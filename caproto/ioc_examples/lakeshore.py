@@ -129,15 +129,12 @@ class PIDController(PID):
 
             # Ramping logic.
             remaining = (self._setpoint_target - self.setpoint)
+            self._ramping = bool(remaining)
             if isinstance(self.ramp_rate, (int, float)):
                 if remaining > 0:
                     self._setpoint += min(self.ramp_rate*iteration_time, abs(remaining))
-                    self._ramping = True
                 elif remaining < 0:
                     self._setpoint -= min(self.ramp_rate*iteration_time, abs(remaining))
-                    self._ramping = True
-                elif remaining == 0:
-                    self._ramping = False
             elif self.ramp_rate is None and remaining != 0:
                 self._setpoint = self._setpoint_target
 
