@@ -80,7 +80,7 @@ class ThermalMaterial:
 
 
 class PIDController(PID):
-    def __init__(self, get_feedback, set_output, ramp_rate=None,
+    def __init__(self, get_feedback, set_output, ramp_rate=1,
                  setpoint=150,
                  *args, **kwargs):
         self._setpoint = setpoint
@@ -307,7 +307,7 @@ from ophyd import Component as Cpt
 
 class Lakeshore(Device):
     feedback = Cpt(EpicsSignalRO, ':feedback')
-    setpoint = Cpt(EpicsSignal, ':setpoint')
+    setpoint = Cpt(EpicsSignal, ':setpoint', put_complete=True)
     ramp_rate = Cpt(EpicsSignal, 'ramp_rate')
 
 
