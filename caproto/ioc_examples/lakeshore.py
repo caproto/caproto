@@ -86,6 +86,7 @@ class PIDController(PID):
         self._feedback = None
         self._output = None
         self._run = True
+        self._ramping = False
         self.history = {"output": [], "feedback": [], "setpoint": [], "timestamp": []}
         threading.Thread(target=self._executor).start()
 
@@ -107,6 +108,10 @@ class PIDController(PID):
         if self.ramp_rate is None:
             self._setpoint = value
 
+    @property
+    def ramping(self):
+        return self._ramping
+
     def stop(self):
         self._run = False
 
@@ -126,8 +131,12 @@ class PIDController(PID):
             if isinstance(self.ramp_rate, (int, float)):
                 if remaining > 0:
                     self._setpoint += min(self.ramp_rate*iteration_time, abs(remaining))
+                    self._ramping = True
                 elif remaining < 0:
                     self._setpoint -= min(self.ramp_rate*iteration_time, abs(remaining))
+                    self._ramping = True
+                elif remaining == 0:
+                    self._ramping = False
             elif self.ramp_rate is None and remaining != 0:
                 self._setpoint = self._setpoint_target
 
@@ -170,6 +179,20 @@ ani = FuncAnimation(plt.gcf(), update, 1000)
 plt.tight_layout()
 plt.show(block=False)
 """
+
+
+def no_reentry(func):
+    @functools.wraps(func)
+    async def inner(*args, **kwargs):
+        if internal_process.get():
+            return
+        try:
+            internal_process.set(True)
+            return (await func(*args, **kwargs))
+        finally:
+            internal_process.set(False)
+
+    return inner
 
 
 class Lakeshore336Sim(PVGroup):
@@ -228,14 +251,39 @@ class Lakeshore336Sim(PVGroup):
         value=100, dtype=float, name="setpoint", doc="temperature setpoint"
     )
 
+    async def wait_for_completion(self):
+        while True:
+            old_ramping = self._temperature_controller.ramping
+            await asyncio.sleep(0.1)
+            ramping = self._temperature_controller.ramping
+            if old_ramping and not ramping:
+                return
+
     @setpoint.getter
     async def setpoint(self, instance):
         return self._temperature_controller.setpoint
 
     @setpoint.putter
+    @no_reentry
     async def setpoint(self, instance, value):
-        self._temperature_controller.setpoint = value
-        return value
+
+        if not instance.ev.is_set():
+            await instance.ev.wait()
+            return self._temperature_controller.setpoint
+
+        instance.ev.clear()
+        try:
+            self._temperature_controller.setpoint = value
+            await wait_for_completion()
+        finally:
+            instance.ev.set()
+        return self._temperature_controller.setpoint
+
+    @setpoint.startup
+    async def setpoint(self, instance, async_lib):
+        instance.async_lib = async_lib
+        instance.ev = async_lib.Event()
+        instance.ev.set()
 
     feedback = pvproperty(
         value=100, dtype=float, name="feedback", doc="temperature feedback"
