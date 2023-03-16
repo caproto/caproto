@@ -309,7 +309,7 @@ class LakeshoreIOC(PVGroup):
 
     async def wait_for_completion(self):
         """
-        Wait until the device is changing the setpoint.
+        Wait until the device is done changing the setpoint.
         """
         while True:
             if not self._temperature_controller.ramping:
