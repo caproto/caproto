@@ -6,7 +6,7 @@ import time
 
 from simple_pid import PID
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
-from ophyd import EpicsSignal, EpicsSignalRO, Device, PVPositionerPC
+from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
 from ophyd import Component as Cpt
 
 
