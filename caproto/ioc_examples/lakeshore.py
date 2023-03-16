@@ -1,13 +1,13 @@
 import asyncio
 import contextvars
 import functools
-import time
 import threading
-from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
+import time
+
 from simple_pid import PID
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
+from ophyd import EpicsSignal, EpicsSignalRO, Device, PVPositionerPC
+from ophyd import Component as Cpt
 
 
 class ThermalMaterial:
@@ -80,9 +80,58 @@ class ThermalMaterial:
 
 
 class PIDController(PID):
-    def __init__(self, get_feedback, set_output, ramp_rate=1,
-                 setpoint=150,
-                 *args, **kwargs):
+    """
+    General purpose PID controller that supports ramping.
+
+    Parameters
+    ----------
+    get_feedback: callable
+        A function that returns the feedback value of the system.
+    set_output: callable
+        A function that sets the output value of the system.
+    ramp_rate: int, float
+        The rate that the setpoint should ramp at.
+    setpoint: int, float
+
+    Example
+    -------
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+    from caproto.ioc_examples.lakeshore import PIDController, ThermalMaterial
+
+    sample = ThermalMaterial()
+    setpoint = 150
+
+    temperature_controller = PIDController(
+        lambda: sample.temperature,
+        sample.set_heater_power,
+        Kp=1,
+        Ki=0.1,
+        Kd=0.05,
+        ramp_rate=1,
+        setpoint=setpoint,
+    )
+
+    def update(i):
+        x_values = temperature_controller.history['timestamp']
+        plt.cla()
+        plt.plot(x_values, temperature_controller.history['feedback'])
+        plt.plot(x_values, temperature_controller.history['output'])
+        plt.plot(x_values, temperature_controller.history['setpoint'])
+        plt.xlabel('time')
+        plt.ylabel('temperature')
+        plt.title('Temperature Controller')
+        plt.gcf().autofmt_xdate()
+        plt.tight_layout()
+
+    ani = FuncAnimation(plt.gcf(), update, 1000)
+    plt.tight_layout()
+    plt.show(block=False)
+    """
+
+    def __init__(
+        self, get_feedback, set_output, ramp_rate=1, setpoint=150, *args, **kwargs
+    ):
         self._setpoint = setpoint
         self.ramp_rate = ramp_rate
         super().__init__(setpoint=setpoint, *args, **kwargs)
@@ -109,6 +158,12 @@ class PIDController(PID):
 
     @setpoint.setter
     def setpoint(self, value):
+        """
+        Always set ramping to true at the same time as
+        the setpoint change. Is will avoid a race condition,
+        and will allow the client to just check for ramping = False
+        to determine completion.
+        """
         self._setpoint_target = value
         self._ramping = True
         if self.ramp_rate is None:
@@ -133,79 +188,50 @@ class PIDController(PID):
             self._set_output(self._output)
 
             # Ramping logic.
-            remaining = (self._setpoint_target - self.setpoint)
+            remaining = self._setpoint_target - self.setpoint
             self._ramping = bool(remaining)
             if isinstance(self.ramp_rate, (int, float)):
                 if remaining > 0:
-                    self._setpoint += min(self.ramp_rate*iteration_time, abs(remaining))
+                    self._setpoint += min(
+                        self.ramp_rate * iteration_time, abs(remaining)
+                    )
                 elif remaining < 0:
-                    self._setpoint -= min(self.ramp_rate*iteration_time, abs(remaining))
+                    self._setpoint -= min(
+                        self.ramp_rate * iteration_time, abs(remaining)
+                    )
             elif self.ramp_rate is None and remaining != 0:
                 self._setpoint = self._setpoint_target
 
             time.sleep(iteration_time)
 
 
-"""
-# Temperature Controller Example Code
+internal_process = contextvars.ContextVar("internal_process", default=False)
 
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from caproto.ioc_examples.lakeshore import PIDController, ThermalMaterial
-
-sample = ThermalMaterial()
-setpoint = 150
-
-temperature_controller = PIDController(
-    lambda: sample.temperature,
-    sample.set_heater_power,
-    Kp=1,
-    Ki=0.1,
-    Kd=0.05,
-    ramp_rate=1,
-    setpoint=setpoint,
-)
-
-def update(i):
-    x_values = temperature_controller.history['timestamp']
-    plt.cla()
-    plt.plot(x_values, temperature_controller.history['feedback'])
-    plt.plot(x_values, temperature_controller.history['output'])
-    plt.plot(x_values, temperature_controller.history['setpoint'])
-    plt.xlabel('time')
-    plt.ylabel('temperature')
-    plt.title('Temperature Controller')
-    plt.gcf().autofmt_xdate()
-    plt.tight_layout()
-
-ani = FuncAnimation(plt.gcf(), update, 1000)
-plt.tight_layout()
-plt.show(block=False)
-"""
-
-internal_process = contextvars.ContextVar('internal_process',
-                                          default=False)
 
 def no_reentry(func):
+    """
+    This is needed for put completion.
+    """
+
     @functools.wraps(func)
     async def inner(*args, **kwargs):
         if internal_process.get():
             return
         try:
             internal_process.set(True)
-            return (await func(*args, **kwargs))
+            return await func(*args, **kwargs)
         finally:
             internal_process.set(False)
 
     return inner
 
 
-class Lakeshore336Sim(PVGroup):
+class LakeshoreIOC(PVGroup):
     """
-    Simulated Lakeshore IOC.
+    Simulated Lakeshore IOC with put completion on the setpoint.
     """
 
-    def __init__(self, *args, plot=True, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._sample = ThermalMaterial()
 
@@ -217,7 +243,6 @@ class Lakeshore336Sim(PVGroup):
             Kd=0.05,
             setpoint=150,
         )
-
 
     Kp = pvproperty(value=0, dtype=float, name="Kp", doc="PID parameter Kp")
 
@@ -252,11 +277,25 @@ class Lakeshore336Sim(PVGroup):
         self._temperature_controller.Kd = value
         return value
 
+    ramp_rate = pvproperty(value=0, dtype=float, name="ramp_rate", doc="ramp_rate")
+
+    @ramp_rate.getter
+    async def ramp_rate(self, instance):
+        return self._temperature_controller.ramp_rate
+
+    @ramp_rate.putter
+    async def ramp_rate(self, instance, value):
+        self._temperature_controller.ramp_rate = value
+        return value
+
     setpoint = pvproperty(
         value=100, dtype=float, name="setpoint", doc="temperature setpoint"
     )
 
     async def wait_for_completion(self):
+        """
+        Wait until the device is changing the setpoint.
+        """
         while True:
             if not self._temperature_controller.ramping:
                 return
@@ -269,7 +308,6 @@ class Lakeshore336Sim(PVGroup):
     @setpoint.putter
     @no_reentry
     async def setpoint(self, instance, value):
-
         if not instance.ev.is_set():
             await instance.ev.wait()
             return self._temperature_controller.setpoint
@@ -284,6 +322,9 @@ class Lakeshore336Sim(PVGroup):
 
     @setpoint.startup
     async def setpoint(self, instance, async_lib):
+        """
+        This is needed to enable put completion.
+        """
         instance.async_lib = async_lib
         instance.ev = async_lib.Event()
         instance.ev.set()
@@ -302,20 +343,33 @@ class Lakeshore336Sim(PVGroup):
     async def output(self, instance):
         return self._temperature_controller.output
 
-from ophyd import EpicsSignal, EpicsSignalRO, Device
-from ophyd import Component as Cpt
 
-class Lakeshore(Device):
-    feedback = Cpt(EpicsSignalRO, ':feedback')
-    setpoint = Cpt(EpicsSignal, ':setpoint', put_complete=True)
-    ramp_rate = Cpt(EpicsSignal, 'ramp_rate')
+class Lakeshore(PVPositionerPC):
+    """
+    Example Ophyd device for Lakeshore that uses put completion.
+    PVPositionerPC does not require a done signal like PVPositioner,
+    instead it uses the setpoint put_completion.
+
+    Example
+    -------
+    ls = Lakeshore('Lakeshore', name='Lakeshore', settle_time=5)
+    ls.set(100).wait()
+
+    This will wait for the ramp to be completed and also wait for
+    the settle_time.
+    """
+
+    feedback = Cpt(EpicsSignalRO, ":feedback")
+    output = Cpt(EpicsSignalRO, ":output")
+    setpoint = Cpt(EpicsSignal, ":setpoint", put_complete=True)
+    ramp_rate = Cpt(EpicsSignal, ":ramp_rate")
 
 
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
-        default_prefix="Lakeshore336Sim:", desc="Lakeshore336Sim IOC"
+        default_prefix="Lakeshore:", desc="Lakeshore IOC"
     )
-    ioc = Lakeshore336Sim(**ioc_options)
+    ioc = LakeshoreIOC(**ioc_options)
 
     print("PVs:", list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
