@@ -2,9 +2,14 @@
 An IOC with a simulated temperature controller.
 This demonstrates how to do put_completion with a caproto ioc and ophyd device.
 
-Another interesting part of this example is the use of settle_time. Settle_time allows us to wait an additional amount after the put_completion. It is used here to wait for the stabilization of the material temperature after the setpoint ramp is complete.
+Another interesting part of this example is the use of settle_time.
+Settle_time allows us to wait an additional amount after the put_completion.
+It is used here to wait for the stabilization of the material temperature
+after the setpoint ramp is complete.
 
-This also includes a simulated material that can be heated/cooled and a PID controller that can be connected to arbitrary systems. The PIDController has a ramp feature so that the setpoint ramps to the target value gradually.
+This also includes a simulated material that can be heated/cooled and a
+PID controller that can be connected to arbitrary systems. The PIDController
+has a ramp feature so that the setpoint ramps to the target value gradually.
 """
 
 import asyncio
@@ -106,7 +111,8 @@ class PIDController(PID):
     -------
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
-    from caproto.ioc_examples.lakeshore import PIDController, ThermalMaterial
+    from caproto.ioc_examples.lakeshore import (PIDController,
+    ThermalMaterial)
 
     sample = ThermalMaterial()
     setpoint = 150
