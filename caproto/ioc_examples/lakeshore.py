@@ -18,6 +18,7 @@ import functools
 import threading
 import time
 
+from collections import deque
 from simple_pid import PID
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
@@ -156,7 +157,10 @@ class PIDController(PID):
         self._output = None
         self._run = True
         self._ramping = False
-        self.history = {"output": [], "feedback": [], "setpoint": [], "timestamp": []}
+        self.history = {"output": deque(maxlen=600),
+                        "feedback": deque(maxlen=600),
+                        "setpoint": deque(maxlen=600),
+                        "timestamp": deque(maxlen=600)}
         threading.Thread(target=self._executor).start()
 
     @property
