@@ -10,6 +10,8 @@ after the setpoint ramp is complete.
 This also includes a simulated material that can be heated/cooled and a
 PID controller that can be connected to arbitrary systems. The PIDController
 has a ramp feature so that the setpoint ramps to the target value gradually.
+
+This example has two non-standard dependencies: ophyd, and simple_pid
 """
 
 import asyncio
