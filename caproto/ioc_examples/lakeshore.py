@@ -279,7 +279,7 @@ class LakeshoreIOC(PVGroup):
             await asyncio.sleep(.1)
 
     Kp = pvproperty(value=0, dtype=float, name="Kp", doc="PID parameter Kp")
-    Kp_rbv = pvproperty(value=0, dtype=float, name="Kp_rbv", doc="PID parameter Kp readback")
+    Kp_rbv = pvproperty(dtype=float, name="Kp_rbv", doc="PID parameter Kp readback")
 
     @Kp.putter
     async def Kp(self, instance, value):
