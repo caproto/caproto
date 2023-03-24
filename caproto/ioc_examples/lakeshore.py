@@ -22,9 +22,12 @@ import time
 
 from collections import deque
 from simple_pid import PID
-from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run, get_pv_pair_wrapper
 from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
 from ophyd import Component as Cpt
+
+
+pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix="", readback_suffix="_rbv")
 
 
 class ThermalMaterial:
@@ -159,10 +162,12 @@ class PIDController(PID):
         self._output = None
         self._run = True
         self._ramping = False
-        self.history = {"output": deque(maxlen=600),
-                        "feedback": deque(maxlen=600),
-                        "setpoint": deque(maxlen=600),
-                        "timestamp": deque(maxlen=600)}
+        self.history = {
+            "output": deque(maxlen=600),
+            "feedback": deque(maxlen=600),
+            "setpoint": deque(maxlen=600),
+            "timestamp": deque(maxlen=600),
+        }
         threading.Thread(target=self._executor).start()
 
     @property
@@ -265,11 +270,18 @@ class LakeshoreIOC(PVGroup):
             setpoint=150,
         )
 
-    Kp = pvproperty(value=0, dtype=float, name="Kp", doc="PID parameter Kp")
+    async def device_poller(self):
+        while True:
+            await self.Kp_rbv.write(self._temperature_controller.Kp)
+            await self.Ki_rbv.write(self._temperature_controller.Ki)
+            await self.Kd_rbv.write(self._temperature_controller.Kd)
+            await self.setpoint_rbv.write(self._temperature_controller.setpoint)
+            await self.feedback_rbv.write(self._temperature_controller.feedback)
+            await self.ramp_rate_rbv.write(self._temperature_controller.ramp_rate)
+            await self.output_rbv.write(self._temperature_controller.output)
 
-    @Kp.getter
-    async def Kp(self, instance):
-        return self._temperature_controller.Kp
+    Kp = pvproperty(value=0, dtype=float, name="Kp", doc="PID parameter Kp")
+    Kp_rbv = pvproperty(dtype=float, name="Kp_rbv", doc="PID parameter Kp readback")
 
     @Kp.putter
     async def Kp(self, instance, value):
@@ -277,10 +289,7 @@ class LakeshoreIOC(PVGroup):
         return value
 
     Ki = pvproperty(value=0, dtype=float, name="Ki", doc="PID parameter Ki")
-
-    @Ki.getter
-    async def Ki(self, instance):
-        return self._temperature_controller.Ki
+    Ki_rbv = pvproperty(dtype=float, name="Ki_rbv", doc="PID parameter Ki readback")
 
     @Ki.putter
     async def Ki(self, instance, value):
@@ -288,10 +297,7 @@ class LakeshoreIOC(PVGroup):
         return value
 
     Kd = pvproperty(value=0, dtype=float, name="Kd", doc="PID parameter Kd")
-
-    @Kd.getter
-    async def Kd(self, instance):
-        return self._temperature_controller.Kd
+    Kd_rbv = pvproperty(dtype=float, name="Kd_rbv", doc="PID parameter Kd readback")
 
     @Kd.putter
     async def Kd(self, instance, value):
@@ -299,10 +305,9 @@ class LakeshoreIOC(PVGroup):
         return value
 
     ramp_rate = pvproperty(value=0, dtype=float, name="ramp_rate", doc="ramp_rate")
-
-    @ramp_rate.getter
-    async def ramp_rate(self, instance):
-        return self._temperature_controller.ramp_rate
+    ramp_rate_rbv = pvproperty(
+        dtype=float, name="ramp_rate_rbv", doc="ramp_rate readback"
+    )
 
     @ramp_rate.putter
     async def ramp_rate(self, instance, value):
@@ -311,6 +316,9 @@ class LakeshoreIOC(PVGroup):
 
     setpoint = pvproperty(
         value=100, dtype=float, name="setpoint", doc="temperature setpoint"
+    )
+    setpoint_rbv = pvproperty(
+        dtype=float, name="setpoint_rbv", doc="temperature setpoint"
     )
 
     async def wait_for_completion(self):
@@ -321,10 +329,6 @@ class LakeshoreIOC(PVGroup):
             if not self._temperature_controller.ramping:
                 return
             await asyncio.sleep(0.1)
-
-    @setpoint.getter
-    async def setpoint(self, instance):
-        return self._temperature_controller.setpoint
 
     @setpoint.putter
     @no_reentry
@@ -349,20 +353,17 @@ class LakeshoreIOC(PVGroup):
         instance.async_lib = async_lib
         instance.ev = async_lib.Event()
         instance.ev.set()
+        await self.device_poller()
 
     feedback = pvproperty(
         value=100, dtype=float, name="feedback", doc="temperature feedback"
     )
-
-    @feedback.getter
-    async def feedback(self, instance):
-        return self._temperature_controller.feedback
+    feedback_rbv = pvproperty(
+        dtype=float, name="feedback_rbv", doc="temperature feedback readback"
+    )
 
     output = pvproperty(value=100, dtype=float, name="output", doc="output value")
-
-    @output.getter
-    async def output(self, instance):
-        return self._temperature_controller.output
+    output_rbv = pvproperty(dtype=float, name="output_rbv", doc="output value readback")
 
 
 class Lakeshore(PVPositionerPC):
@@ -380,10 +381,12 @@ class Lakeshore(PVPositionerPC):
     the settle_time.
     """
 
-    feedback = Cpt(EpicsSignalRO, ":feedback")
-    output = Cpt(EpicsSignalRO, ":output")
+    feedback = Cpt(EpicsSignalRO, ":feedback_rbv")
+    output = Cpt(EpicsSignalRO, ":output_rbv")
     setpoint = Cpt(EpicsSignal, ":setpoint", put_complete=True)
+    setpoint_rbv = Cpt(EpicsSignalRO, ":setpoint_rbv")
     ramp_rate = Cpt(EpicsSignal, ":ramp_rate")
+    ramp_rate_rbv = Cpt(EpicsSignal, ":ramp_rate_rbv")
 
 
 if __name__ == "__main__":
