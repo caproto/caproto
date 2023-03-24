@@ -27,9 +27,6 @@ from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
 from ophyd import Component as Cpt
 
 
-pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix="", readback_suffix="_rbv")
-
-
 class ThermalMaterial:
     """
     A material that you can heat and cool.
@@ -279,9 +276,10 @@ class LakeshoreIOC(PVGroup):
             await self.feedback_rbv.write(self._temperature_controller.feedback)
             await self.ramp_rate_rbv.write(self._temperature_controller.ramp_rate)
             await self.output_rbv.write(self._temperature_controller.output)
+            await asyncio.sleep(.1)
 
     Kp = pvproperty(value=0, dtype=float, name="Kp", doc="PID parameter Kp")
-    Kp_rbv = pvproperty(dtype=float, name="Kp_rbv", doc="PID parameter Kp readback")
+    Kp_rbv = pvproperty(value=0, dtype=float, name="Kp_rbv", doc="PID parameter Kp readback")
 
     @Kp.putter
     async def Kp(self, instance, value):
