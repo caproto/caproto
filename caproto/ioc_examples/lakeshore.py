@@ -22,7 +22,7 @@ import time
 
 from collections import deque
 from simple_pid import PID
-from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run, get_pv_pair_wrapper
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty
 from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
 from ophyd import Component as Cpt
 
