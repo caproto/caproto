@@ -34,7 +34,7 @@ extensions = [
     'sphinx.ext.githubpages',
     'sphinx.ext.intersphinx',
     'numpydoc',
-    # 'doctr_versions_menu',
+    # 'docs_versions_menu',
     'sphinx_rtd_theme',
 ]
 

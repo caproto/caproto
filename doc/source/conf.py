@@ -30,10 +30,10 @@ extensions = [
     'IPython.sphinxext.ipython_directive',
     'IPython.sphinxext.ipython_console_highlighting',
     'numpydoc',
-    'doctr_versions_menu',
+    'docs_versions_menu',
 ]
 
-doctr_versions_menu_conf = {
+docs_versions_menu_conf = {
     'json_file': '/caproto/versions.json'
 }
 
