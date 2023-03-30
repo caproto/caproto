@@ -2,6 +2,16 @@
 Release History
 ***************
 
+v1.0.1 (2023-03-29)
+===================
+
+Added / Fixed
+-------------
+
+* Timeout no longer ignored in pyepics_compat's caget_many (@mcnanneyd, #806)
+* New example: Lakeshore temperature controller (@gwbischof, #809)
+
+
 v1.0.0 (2022-09-01)
 ===================
 

@@ -1,6 +1,5 @@
 curio
-doctr
-doctr-versions-menu
+docs-versions-menu
 graphviz
 ipython>7
 matplotlib

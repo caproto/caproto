@@ -2,6 +2,7 @@
 from textwrap import dedent
 
 from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
+from caproto.server.records import MotorFields
 
 
 async def broadcast_precision_to_fields(record):
@@ -41,7 +42,7 @@ async def motor_record_simulator(instance, async_lib, defaults=None,
             user_limits=(0.0, 100.0),
         )
 
-    fields = instance.field_inst  # type: MotorFields
+    fields: MotorFields = instance.field_inst
     have_new_position = False
 
     async def value_write_hook(fields, value):

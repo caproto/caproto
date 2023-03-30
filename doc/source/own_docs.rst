@@ -30,9 +30,10 @@ or ``conda`` (i.e., ``pip install --requirement requirements-docs.txt`` or
 
 .. literalinclude:: example_requirements-docs.txt
 
-``doctr`` and ``doctr-versions-menu`` are useful if building documentation
-using continuous integration, but are unnecessary if you will only be building
-documentation locally.
+``docs-versions-menu`` is useful for building versioned documentation targeting
+GitHub pages using continuous integration.  It is unnecessary if you will only
+be building documentation locally or only care about the latest release
+documentation.
 
 
 Using autosummary
