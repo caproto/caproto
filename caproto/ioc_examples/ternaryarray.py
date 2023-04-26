@@ -2,7 +2,7 @@ import asyncio
 import threading
 import time
 
-from functools import partialmethod
+from functools import partial, partialmethod, wraps
 
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
@@ -19,7 +19,7 @@ class TernaryDevice:
         The time it takes for the device to change from state-0 to state-1.
     """
 
-    def __init__(self, delay=0.1):
+    def __init__(self, delay=0.5):
         self._delay = delay
         self._state = 0
 
@@ -51,30 +51,35 @@ class TernaryArrayIOC(PVGroup):
     """
 
     def __init__(self, count=10, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._count = count
         self._devices = [TernaryDevice() for i in range(count)]
+        super().__init__(*args, **kwargs)
 
-        # Create pvs for all of the devices.
+        # Dynamically setup the pvs.
         for i in range(count):
+            # Create the setpoint pv.
             setattr(self, f'device{i}', pvproperty(value=0, dtype=int, name=f'device{i}'))
+
+            # Create the setpoint putter.
+            partial_putter = partial(self.general_putter, self, i)
+            partial_putter.__name__ = f"putter{i}"
+            getattr(self, f'device{i}').putter(partial_putter)
+
+            # Create the readback pv.
             setattr(self, f'device{i}_rbv', pvproperty(value=0, dtype=int, name=f'device{i}_rbv'))
 
-        # Assign putters of all of the setpoint pvs.
-        for i in range(count):
-            getattr(self, f'device{i}').putter(partialmethod(general_putter, i))
+            # Create the readback scan.
+            partial_scan = partial(self.general_scan, self, i)
+            partial_scan.__name__ = f"scan{i}"
+            getattr(self, f'device{i}_rbv').scan(partial_scan, period=0.1)
 
     async def general_putter(self, index, instance, value):
         if value:
-            self.devices[index].set()
+            self._devices[index].set()
         else:
-            self.devices[index].reset()
+            self._devices[index].reset()
 
-    async def device_poller(self):
-        while True:
-            for i in range(self.count):
-                await getattr(self, f'device{i}_rbv').write(self._devices[i].state)
-
+    async def general_scan(self, index, instance, async_lib):
+        await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
 
 """
 if __name__ == "__main__":
