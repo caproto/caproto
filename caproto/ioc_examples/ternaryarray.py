@@ -60,7 +60,7 @@ class TernaryArrayIOC(PVGroup):
             setattr(self, f'device{i}', pvproperty(value=0, dtype=int, name=f'device{i}'))
 
             # Create the setpoint putter.
-            partial_putter = partial(self.general_putter, self, i)
+            partial_putter = partial(self.general_putter, i)
             partial_putter.__name__ = f"putter{i}"
             getattr(self, f'device{i}').putter(partial_putter)
 
@@ -68,17 +68,17 @@ class TernaryArrayIOC(PVGroup):
             setattr(self, f'device{i}_rbv', pvproperty(value=0, dtype=int, name=f'device{i}_rbv'))
 
             # Create the readback scan.
-            partial_scan = partial(self.general_scan, self, i)
+            partial_scan = partial(self.general_scan, i)
             partial_scan.__name__ = f"scan{i}"
             getattr(self, f'device{i}_rbv').scan(partial_scan, period=0.1)
 
-    async def general_putter(self, index, instance, value):
+    async def general_putter(self, index, group, instance, value):
         if value:
             self._devices[index].set()
         else:
             self._devices[index].reset()
 
-    async def general_scan(self, index, instance, async_lib):
+    async def general_scan(self, index, group, instance, async_lib):
         await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
 
 """
