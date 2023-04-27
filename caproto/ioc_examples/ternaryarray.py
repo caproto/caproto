@@ -52,7 +52,6 @@ class TernaryArrayIOC(PVGroup):
 
     def __init__(self, count=10, *args, **kwargs):
         self._devices = [TernaryDevice() for i in range(count)]
-        super().__init__(*args, **kwargs)
 
         # Dynamically setup the pvs.
         for i in range(count):
@@ -70,7 +69,11 @@ class TernaryArrayIOC(PVGroup):
             # Create the readback scan.
             partial_scan = partial(self.general_scan, i)
             partial_scan.__name__ = f"scan{i}"
-            getattr(self, f'device{i}_rbv').scan(partial_scan, period=0.1)
+            getattr(self, f'device{i}_rbv').scan(period=0.1)(partial_scan)
+
+        super().__init__(*args, **kwargs)
+        # Register the late pvs.
+        self.pvdb.update(PVGroup.find_pvproperties(self.__dict__))
 
     async def general_putter(self, index, group, instance, value):
         if value:
@@ -81,13 +84,12 @@ class TernaryArrayIOC(PVGroup):
     async def general_scan(self, index, group, instance, async_lib):
         await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
 
-"""
+
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
         default_prefix="TernaryArray:", desc="TernaryArray IOC"
     )
     ioc = TernaryArrayIOC(**ioc_options)
-
+    print("Prefix =", "TernaryArray:")
     print("PVs:", list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
-"""
