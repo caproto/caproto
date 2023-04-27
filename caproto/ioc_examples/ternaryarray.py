@@ -3,7 +3,7 @@ import threading
 import time
 
 from functools import partial, partialmethod, wraps
-
+from collections import OrderedDict
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
 from ophyd import Component as Cpt
@@ -26,13 +26,13 @@ class TernaryDevice:
     def set(self):
         if not self._state:
             self._state = 1
-            time.sleep(self._delay)
+            asyncio.sleep(self._delay)
             self._state = 2
 
     def reset(self):
         if self._state == 2:
             self._state = 1
-            time.sleep(self._delay)
+            asyncio.sleep(self._delay)
             self._state = 0
 
     @property
@@ -71,9 +71,9 @@ class TernaryArrayIOC(PVGroup):
             partial_scan.__name__ = f"scan{i}"
             getattr(self, f'device{i}_rbv').scan(period=0.1)(partial_scan)
 
+        # Unfortunate hack to register the late pvs.
+        self.__dict__['_pvs_'] = OrderedDict(PVGroup.find_pvproperties(self.__dict__))
         super().__init__(*args, **kwargs)
-        # Register the late pvs.
-        self.pvdb.update(PVGroup.find_pvproperties(self.__dict__))
 
     async def general_putter(self, index, group, instance, value):
         if value:
@@ -82,8 +82,10 @@ class TernaryArrayIOC(PVGroup):
             self._devices[index].reset()
 
     async def general_scan(self, index, group, instance, async_lib):
-        await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
-
+        # A hacky way to write to the pv.
+        await self.pvdb[f'{self.prefix}device{index}_rbv'].write(self._devices[index].state)
+        # This is the normal way to do this, but it doesn't work correctly for this example.
+        #await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
 
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
