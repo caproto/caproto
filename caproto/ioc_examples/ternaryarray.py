@@ -21,16 +21,16 @@ class TernaryDevice:
         self._delay = delay
         self._state = 0
 
-    def set(self):
+    async def set(self):
         if not self._state:
             self._state = 1
-            asyncio.sleep(self._delay)
+            await asyncio.sleep(self._delay)
             self._state = 2
 
-    def reset(self):
+    async def reset(self):
         if self._state == 2:
             self._state = 1
-            asyncio.sleep(self._delay)
+            await asyncio.sleep(self._delay)
             self._state = 0
 
     @property
@@ -81,9 +81,9 @@ class TernaryArrayIOC(PVGroup):
 
     async def general_putter(self, index, group, instance, value):
         if value:
-            self._devices[index].set()
+            await self._devices[index].set()
         else:
-            self._devices[index].reset()
+            await self._devices[index].reset()
 
     async def general_scan(self, index, group, instance, async_lib):
         # A hacky way to write to the pv.
