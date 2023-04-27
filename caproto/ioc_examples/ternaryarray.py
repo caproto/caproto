@@ -1,8 +1,6 @@
 import asyncio
-import threading
-import time
 
-from functools import partial, partialmethod, wraps
+from functools import partial
 from collections import OrderedDict
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
@@ -56,23 +54,29 @@ class TernaryArrayIOC(PVGroup):
         # Dynamically setup the pvs.
         for i in range(count):
             # Create the setpoint pv.
-            setattr(self, f'device{i}', pvproperty(value=0, dtype=int, name=f'device{i}'))
+            setattr(
+                self, f"device{i}", pvproperty(value=0, dtype=int, name=f"device{i}")
+            )
 
             # Create the setpoint putter.
             partial_putter = partial(self.general_putter, i)
             partial_putter.__name__ = f"putter{i}"
-            getattr(self, f'device{i}').putter(partial_putter)
+            getattr(self, f"device{i}").putter(partial_putter)
 
             # Create the readback pv.
-            setattr(self, f'device{i}_rbv', pvproperty(value=0, dtype=int, name=f'device{i}_rbv'))
+            setattr(
+                self,
+                f"device{i}_rbv",
+                pvproperty(value=0, dtype=int, name=f"device{i}_rbv"),
+            )
 
             # Create the readback scan.
             partial_scan = partial(self.general_scan, i)
             partial_scan.__name__ = f"scan{i}"
-            getattr(self, f'device{i}_rbv').scan(period=0.1)(partial_scan)
+            getattr(self, f"device{i}_rbv").scan(period=0.1)(partial_scan)
 
         # Unfortunate hack to register the late pvs.
-        self.__dict__['_pvs_'] = OrderedDict(PVGroup.find_pvproperties(self.__dict__))
+        self.__dict__["_pvs_"] = OrderedDict(PVGroup.find_pvproperties(self.__dict__))
         super().__init__(*args, **kwargs)
 
     async def general_putter(self, index, group, instance, value):
@@ -83,9 +87,12 @@ class TernaryArrayIOC(PVGroup):
 
     async def general_scan(self, index, group, instance, async_lib):
         # A hacky way to write to the pv.
-        await self.pvdb[f'{self.prefix}device{index}_rbv'].write(self._devices[index].state)
+        await self.pvdb[f"{self.prefix}device{index}_rbv"].write(
+            self._devices[index].state
+        )
         # This is the normal way to do this, but it doesn't work correctly for this example.
-        #await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
+        # await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
+
 
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
