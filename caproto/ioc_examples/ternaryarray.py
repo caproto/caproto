@@ -7,7 +7,7 @@ from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
 from ophyd import Component as Cpt
 
 
-class TernaryDevice:
+class TernaryDeviceSim:
     """
     A device with three states.
 
@@ -19,19 +19,19 @@ class TernaryDevice:
 
     def __init__(self, delay=0.5):
         self._delay = delay
-        self._state = 0
+        self._state = None
 
     async def set(self):
         if not self._state:
-            self._state = 1
+            self._state = None
             await asyncio.sleep(self._delay)
-            self._state = 2
+            self._state = True
 
     async def reset(self):
-        if self._state == 2:
-            self._state = 1
+        if self._state:
+            self._state = None
             await asyncio.sleep(self._delay)
-            self._state = 0
+            self._state = False
 
     @property
     def state(self):
@@ -49,7 +49,7 @@ class TernaryArrayIOC(PVGroup):
     """
 
     def __init__(self, count=10, *args, **kwargs):
-        self._devices = [TernaryDevice() for i in range(count)]
+        self._devices = [TernaryDeviceSim() for i in range(count)]
 
         # Dynamically setup the pvs.
         for i in range(count):
@@ -94,6 +94,44 @@ class TernaryArrayIOC(PVGroup):
         # await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
 
 
+
+class TernaryDevice(Device):
+    set_cmd = FormattedComponent(EpicsSignal, self._set_name)
+    reset_cmd = FormattedComponent(EpicsSignal, self._reset_name)
+    state_rbv = FormattedComponent(EpicsSignalRO, self._state_name)
+
+    def __init__(self, *args, set_name, reset_name, state_name,**kwargs) -> None:
+        self._set_name = set_name
+        self._reset_name = reset_name
+        self._state_name = state_name
+        self._state = None
+        super().__init__(*args, **kwargs)
+
+    def set(self, value=True):
+        st = DeviceStatus(self)
+        if self.get() == value:
+            st._finished()
+            return st
+        self._set_st = st
+
+        def state_cb(value, timestamp, **kwargs):
+            self._state = value
+        self.state_rbv.subscribe(state_cb)
+
+        if value:
+            set_cmd.set(1)
+        else:
+            reset_cmd.set(1)
+        return st
+
+    def reset(self):
+        self.set(False)
+
+    def get(self):
+        return self._state
+
+
+"""
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
         default_prefix="TernaryArray:", desc="TernaryArray IOC"
@@ -102,3 +140,4 @@ if __name__ == "__main__":
     print("Prefix =", "TernaryArray:")
     print("PVs:", list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
+"""
