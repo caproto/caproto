@@ -121,8 +121,12 @@ class TernaryDevice(Device):
         super().__init__(*args, **kwargs)
 
     def set(self, value=True):
+
+        if value not in {True, False, 0, 1}:
+            raise ValueError("value must be one of the following: True, False, 0, 1")
+
         st = DeviceStatus(self)
-        if self._state == value:
+        if self._state == bool(value):
             st._finished()
             return st
         self._set_st = st
@@ -146,6 +150,20 @@ class TernaryDevice(Device):
     @property
     def state(self):
         return self._state
+
+
+class Filter(TernaryDevice):
+    """
+    This class is an example about how to create a TernaryDevice specialization
+    for a specific implementation.
+    """
+
+    def __init__(self, index, *args, **kwargs):
+        super().__init__(set_name=f'{self.prefix}{index}}}Cmd:Opn-Cmd',
+                         reset_name=f'{self.prefix}{index}}}Cmd:Cls-Cmd',
+                         state_name=f'{self.prefix}{index}}}Pos-Sts',
+                         state_enum=StateEnum,
+                         ,*args, **kwargs)
 
 
 """
