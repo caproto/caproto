@@ -4,7 +4,7 @@ from enum import Enum
 from functools import partial
 from collections import OrderedDict
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
-from ophyd import EpicsSignal, EpicsSignalRO, PVPositionerPC
+from ophyd import EpicsSignal, EpicsSignalRO, FormattedComponent
 from ophyd import Component as Cpt
 
 
@@ -108,9 +108,9 @@ class TernaryDevice(Device):
     with 3 posible signals.
     """
 
-    set_cmd = FormattedComponent(EpicsSignal, self._set_name)
-    reset_cmd = FormattedComponent(EpicsSignal, self._reset_name)
-    state_rbv = FormattedComponent(EpicsSignalRO, self._state_name)
+    set_cmd = FormattedComponent(EpicsSignal, '{self._set_name}')
+    reset_cmd = FormattedComponent(EpicsSignal, '{self._reset_name}')
+    state_rbv = FormattedComponent(EpicsSignalRO, '{self._state_name}')
 
     def __init__(self, *args, set_name, reset_name, state_name, state_enum, **kwargs) -> None:
         self._state_enum = state_enum
@@ -152,19 +152,22 @@ class TernaryDevice(Device):
         return self._state
 
 
-class Filter(TernaryDevice):
+class CmsFilter(TernaryDevice):
     """
     This class is an example about how to create a TernaryDevice specialization
     for a specific implementation.
     """
 
     def __init__(self, index, *args, **kwargs):
-        super().__init__(set_name=f'{self.prefix}{index}}}Cmd:Opn-Cmd',
-                         reset_name=f'{self.prefix}{index}}}Cmd:Cls-Cmd',
-                         state_name=f'{self.prefix}{index}}}Pos-Sts',
+        super().__init__(*args,
+                         name=f'Filter{index}',
+                         set_name=f'XF:11BMB-OP{{Fltr:{index}}}Cmd:Opn-Cmd',
+                         reset_name=f'XF:11BMB-OP{{Fltr:{index}}}Cmd:Cls-Cmd',
+                         state_name=f'XF:11BMB-OP{{Fltr:{index}}}Pos-Sts',
                          state_enum=StateEnum,
-                         ,*args, **kwargs)
+                         **kwargs)
 
+filter1 = CmsFilter(1)
 
 """
 if __name__ == "__main__":
