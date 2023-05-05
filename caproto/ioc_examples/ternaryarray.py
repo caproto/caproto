@@ -143,12 +143,17 @@ class TernaryDevice(Device):
         target_value = bool(value)
 
         st = DeviceStatus(self)
+
+        # If the device already has the requested state, return a finished status.
         if self._state == bool(value):
             st._finished()
             return st
         self._set_st = st
 
         def state_cb(value, timestamp, **kwargs):
+            """
+            Updates self._state and checks if the status should be marked as finished.
+            """
             try:
                 self._state = self._state_enum[value].value
             except KeyError:
@@ -157,8 +162,11 @@ class TernaryDevice(Device):
                 self._set_st = None
                 st._finished()
 
+        # Subscribe the callback to the readback signal.
+        # The callback will be called each time the PV value changes.
         self.state_rbv.subscribe(state_cb)
 
+        # Write to the signal.
         if value:
             set_cmd.set(1)
         else:
@@ -172,7 +180,7 @@ class TernaryDevice(Device):
         return self._state
 
 
-class ExampleFilter(TernaryDevice):
+class ExampleTernary(TernaryDevice):
     """
     This class is an example about how to create a TernaryDevice specialization
     for a specific implementation.
@@ -190,7 +198,7 @@ class ExampleFilter(TernaryDevice):
         )
 
 
-filter1 = ExampleFilter(1)
+ternary1 = ExampleTernary(1)
 
 
 class CmsFilter(TernaryDevice):
@@ -215,6 +223,16 @@ cms_filter1 = CmsFilter(1)
 
 
 class ArrayDevice(Device):
+    """
+    An ophyd.Device that is an array of devices.
+
+    The set method takes a list of values.
+    the get method returns a list of values.
+    Parameters
+    ----------
+    devices: iterable
+        The array of ophyd devices.
+    """
     def __init__(self, devices, *args, **kwargs):
         types = {type(device) for device in devices}
         if len(types) != 1:
@@ -230,10 +248,12 @@ class ArrayDevice(Device):
                 f"the number of devices ({len(self._devices)})"
             )
 
+        # If the device already has the requested state, return a finished status.
         diff = [self._devices[i].get() != value for i, value in enumerate(values)]
         if not any(diff):
             return DeviceStatus(self, success=True, done=True)
 
+        # Set the value of each device and return all of the statuses anded together.
         st = [self._devices[0].set(value)]
         for i, value in enumerate(values[1:]):
             st &= self._devices[i].set(value)
@@ -242,13 +262,8 @@ class ArrayDevice(Device):
     def get(self):
         return [device.get() for device in self._devices]
 
-    @property
-    def state(self):
-        return [device.state for device in self._devices]
+attenuator = ArrayDevice([ExampleFilter(i) for i in range(10)], name='attenuator')
 
-
-filter_array = ArrayDevice([ExampleFilter(i) for i in range(10)])
-cms_attenuator = ArrayDevice([CmsFilter(i) for i in range(10)])
 
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
