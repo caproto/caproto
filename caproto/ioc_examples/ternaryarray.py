@@ -59,10 +59,11 @@ class TernaryArrayIOC(PVGroup):
 
         # Dynamically setup the pvs.
         for i in range(count):
-
             # Create the set pv.
             setattr(
-                self, f"device{i}_set", pvproperty(value=0, dtype=int, name=f"device{i}_set")
+                self,
+                f"device{i}_set",
+                pvproperty(value=0, dtype=int, name=f"device{i}_set"),
             )
 
             # Create the set putter.
@@ -72,7 +73,9 @@ class TernaryArrayIOC(PVGroup):
 
             # Create the reset pv.
             setattr(
-                self, f"device{i}_reset", pvproperty(value=0, dtype=int, name=f"device{i}_reset")
+                self,
+                f"device{i}_reset",
+                pvproperty(value=0, dtype=int, name=f"device{i}_reset"),
             )
 
             # Create the reset putter.
@@ -84,7 +87,7 @@ class TernaryArrayIOC(PVGroup):
             setattr(
                 self,
                 f"device{i}_rbv",
-                pvproperty(value='Unknown', dtype=str, name=f"device{i}_rbv"),
+                pvproperty(value="Unknown", dtype=str, name=f"device{i}_rbv"),
             )
 
             # Create the readback scan.
@@ -119,11 +122,13 @@ class TernaryDevice(Device):
     with 3 posible signals.
     """
 
-    set_cmd = FormattedComponent(EpicsSignal, '{self._set_name}')
-    reset_cmd = FormattedComponent(EpicsSignal, '{self._reset_name}')
-    state_rbv = FormattedComponent(EpicsSignalRO, '{self._state_name}')
+    set_cmd = FormattedComponent(EpicsSignal, "{self._set_name}")
+    reset_cmd = FormattedComponent(EpicsSignal, "{self._reset_name}")
+    state_rbv = FormattedComponent(EpicsSignalRO, "{self._state_name}")
 
-    def __init__(self, *args, set_name, reset_name, state_name, state_enum, **kwargs) -> None:
+    def __init__(
+        self, *args, set_name, reset_name, state_name, state_enum, **kwargs
+    ) -> None:
         self._state_enum = state_enum
         self._set_name = set_name
         self._reset_name = reset_name
@@ -132,11 +137,10 @@ class TernaryDevice(Device):
         super().__init__(*args, **kwargs)
 
     def set(self, value=True):
-
         if value not in {True, False, 0, 1}:
             raise ValueError("value must be one of the following: True, False, 0, 1")
 
-        target_value = self._state_enum[value].value
+        target_value = bool(value)
 
         st = DeviceStatus(self)
         if self._state == bool(value):
@@ -144,7 +148,6 @@ class TernaryDevice(Device):
             return st
         self._set_st = st
 
-        # TODO: Move to init. So that device states stay accurate.
         def state_cb(value, timestamp, **kwargs):
             try:
                 self._state = self._state_enum[value].value
@@ -166,10 +169,6 @@ class TernaryDevice(Device):
         self.set(False)
 
     def get(self):
-        return self._state_enum(self._state).name
-
-    @property
-    def state(self):
         return self._state
 
 
@@ -180,15 +179,19 @@ class ExampleFilter(TernaryDevice):
     """
 
     def __init__(self, index, *args, **kwargs):
-        super().__init__(*args,
-                         name=f'Filter{index}',
-                         set_name=f'TernaryArray:device{index}_set',
-                         reset_name=f'TernaryArray:device{index}_reset',
-                         state_name=f'TernaryArray:device{index}_rbv',
-                         state_enum=StateEnum,
-                         **kwargs)
+        super().__init__(
+            *args,
+            name=f"Filter{index}",
+            set_name=f"TernaryArray:device{index}_set",
+            reset_name=f"TernaryArray:device{index}_reset",
+            state_name=f"TernaryArray:device{index}_rbv",
+            state_enum=StateEnum,
+            **kwargs,
+        )
+
 
 filter1 = ExampleFilter(1)
+
 
 class CmsFilter(TernaryDevice):
     """
@@ -197,21 +200,22 @@ class CmsFilter(TernaryDevice):
     """
 
     def __init__(self, index, *args, **kwargs):
-        super().__init__(*args,
-                         name=f'Filter{index}',
-                         set_name=f'XF:11BMB-OP{{Fltr:{index}}}Cmd:Opn-Cmd',
-                         reset_name=f'XF:11BMB-OP{{Fltr:{index}}}Cmd:Cls-Cmd',
-                         state_name=f'XF:11BMB-OP{{Fltr:{index}}}Pos-Sts',
-                         state_enum=StateEnum,
-                         **kwargs)
+        super().__init__(
+            *args,
+            name=f"Filter{index}",
+            set_name=f"XF:11BMB-OP{{Fltr:{index}}}Cmd:Opn-Cmd",
+            reset_name=f"XF:11BMB-OP{{Fltr:{index}}}Cmd:Cls-Cmd",
+            state_name=f"XF:11BMB-OP{{Fltr:{index}}}Pos-Sts",
+            state_enum=StateEnum,
+            **kwargs,
+        )
+
 
 cms_filter1 = CmsFilter(1)
 
 
 class ArrayDevice(Device):
-
     def __init__(self, devices, *args, **kwargs):
-
         types = {type(device) for device in devices}
         if len(types) != 1:
             raise TypeError("All devices must have the same type")
@@ -221,25 +225,19 @@ class ArrayDevice(Device):
 
     def set(self, values):
         if len(values) != len(self._devices):
-            raise ValueError(f"The number of values ({len(values)}) must match "
-                             f"the number of devices ({len(self._devices)})")
+            raise ValueError(
+                f"The number of values ({len(values)}) must match "
+                f"the number of devices ({len(self._devices)})"
+            )
 
-        # TODO: This bool(value) make this class not general.
-        diff = [self._devices[i].state != bool(value)
-                  for i, value in enumerate(values)]
+        diff = [self._devices[i].get() != value for i, value in enumerate(values)]
         if not any(diff):
             return DeviceStatus(self, success=True, done=True)
 
-        statuses = []
-        for i, value in enumerate(values):
-            statuses.append(self._devices[i].set(value))
-
-        # Combine the statuses.
-        st = statuses[0]
-        for status in statuses[1:]:
-            st &= status
+        st = [self._devices[0].set(value)]
+        for i, value in enumerate(values[1:]):
+            st &= self._devices[i].set(value)
         return st
-
 
     def get(self):
         return [device.get() for device in self._devices]
