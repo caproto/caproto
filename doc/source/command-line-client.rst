@@ -260,7 +260,7 @@ Formatting options applied to **floating point PV values**:
 * ``-e <nr>`` - use %e format with precision of ``<nr>`` digits (e.g. ``-e5`` or ``-e 5``);
 * ``-f <nr>`` - use %f format with precision of ``<nr>`` digits (e.g. ``-f5`` or ``-f 5``);
 * ``-g <nr>`` - use %g format with precision of ``<nr>`` digits (e.g. ``-g5`` or ``-g 5``);
-* ``-s`` - get value as string (honors server-side precision);
+* ``-S`` - get value as string (honors server-side precision);
 * ``-lx`` - round to long integer and print as hex number;
 * ``-lo`` - round to long integer and print as octal number;
 * ``-lb`` - round to long integer and print as binary number.
@@ -351,7 +351,7 @@ caproto-get
                     [--notify] [--priority PRIORITY]
                     [--terse | --wide | -d DATA_TYPE] [--list-types] [-n]
                     [--no-color] [--no-repeater] [--version] [-e <nr>]
-                    [-f <nr>] [-g <nr>] [-s] [-lx] [-lo] [-lb] [-0x] [-0o]
+                    [-f <nr>] [-g <nr>] [-S] [-lx] [-lo] [-lb] [-0x] [-0o]
                     [-0b] [-F <ofs>]
                     pv_names [pv_names ...]
 
@@ -401,7 +401,7 @@ caproto-get
                             or -f 5)
     -g <nr>               Use %g format with precision of <nr> digits (e.g. -g5
                             or -g 5)
-    -s                    Get value as string (honors server-side precision)
+    -S                    Get value as string (honors server-side precision)
     -lx                   Round to long integer and print as hex number
     -lo                   Round to long integer and print as octal number
     -lb                   Round to long integer and print as binary number
@@ -471,7 +471,7 @@ caproto-monitor
                         [--duration DURATION | --maximum MAXIMUM]
                         [--timeout TIMEOUT] [-m MASK] [--priority PRIORITY]
                         [-n] [--no-color] [--no-repeater] [--version] [-e <nr>]
-                        [-f <nr>] [-g <nr>] [-s] [-lx] [-lo] [-lb] [-0x] [-0o]
+                        [-f <nr>] [-g <nr>] [-S] [-lx] [-lo] [-lb] [-0x] [-0o]
                         [-0b] [-F <ofs>]
                         pv_names [pv_names ...]
 
@@ -516,7 +516,7 @@ caproto-monitor
                             or -f 5)
     -g <nr>               Use %g format with precision of <nr> digits (e.g. -g5
                             or -g 5)
-    -s                    Get value as string (honors server-side precision)
+    -S                    Get value as string (honors server-side precision)
     -lx                   Round to long integer and print as hex number
     -lo                   Round to long integer and print as octal number
     -lb                   Round to long integer and print as binary number
