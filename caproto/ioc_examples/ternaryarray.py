@@ -136,6 +136,8 @@ class TernaryDevice(Device):
         if value not in {True, False, 0, 1}:
             raise ValueError("value must be one of the following: True, False, 0, 1")
 
+        target_value = self._state_enum[value].value
+
         st = DeviceStatus(self)
         if self._state == bool(value):
             st._finished()
@@ -148,6 +150,9 @@ class TernaryDevice(Device):
                 self._state = self._state_enum[value].value
             except KeyError:
                 raise ValueError(f"self._state_enum does not contain value: {value}")
+            if self._state == target_value:
+                self._set_st = None
+                st._finished()
 
         self.state_rbv.subscribe(state_cb)
 
@@ -204,7 +209,13 @@ cms_filter1 = CmsFilter(1)
 
 
 class ArrayDevice(Device):
+
     def __init__(self, devices, *args, **kwargs):
+
+        types = {type(device) for device in devices}
+        if len(types) != 1:
+            raise TypeError("All devices must have the same type")
+
         self._devices = devices
         super().__init__(*args, **kwargs)
 
@@ -213,21 +224,22 @@ class ArrayDevice(Device):
             raise ValueError(f"The number of values ({len(values)}) must match "
                              f"the number of devices ({len(self._devices)})")
 
-        st = DeviceStatus(self)
-
         # TODO: This bool(value) make this class not general.
-        equals = [self._devices[i].state == bool(value)
+        diff = [self._devices[i].state != bool(value)
                   for i, value in enumerate(values)]
-        if all(equals):
-            st._finished()
-            return st
-        self._set_st = st
+        if not any(diff):
+            return DeviceStatus(self, success=True, done=True)
 
-        # TODO: Prevent this from being called twice.
+        statuses = []
         for i, value in enumerate(values):
-            self._devices[i].set(value)
+            statuses.append(self._devices[i].set(value))
 
+        # Combine the statuses.
+        st = statuses[0]
+        for status in statuses[1:]:
+            st &= status
         return st
+
 
     def get(self):
         return [device.get() for device in self._devices]
@@ -238,7 +250,7 @@ class ArrayDevice(Device):
 
 
 filter_array = ArrayDevice([ExampleFilter(i) for i in range(10)])
-
+cms_attenuator = ArrayDevice([CmsFilter(i) for i in range(10)])
 
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
