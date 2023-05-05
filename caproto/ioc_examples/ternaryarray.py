@@ -4,8 +4,7 @@ from enum import Enum
 from functools import partial
 from collections import OrderedDict
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
-from ophyd import EpicsSignal, EpicsSignalRO, FormattedComponent
-from ophyd import Component as Cpt
+from ophyd import Device, DeviceStatus, EpicsSignal, EpicsSignalRO, FormattedComponent
 
 
 class StateEnum(Enum):
@@ -60,15 +59,26 @@ class TernaryArrayIOC(PVGroup):
 
         # Dynamically setup the pvs.
         for i in range(count):
-            # Create the setpoint pv.
+
+            # Create the set pv.
             setattr(
-                self, f"device{i}", pvproperty(value=0, dtype=int, name=f"device{i}")
+                self, f"device{i}_set", pvproperty(value=0, dtype=int, name=f"device{i}_set")
             )
 
-            # Create the setpoint putter.
-            partial_putter = partial(self.general_putter, i)
-            partial_putter.__name__ = f"putter{i}"
-            getattr(self, f"device{i}").putter(partial_putter)
+            # Create the set putter.
+            partial_set = partial(self.set_putter, i)
+            partial_set.__name__ = f"set_putter{i}"
+            getattr(self, f"device{i}_set").putter(partial_set)
+
+            # Create the reset pv.
+            setattr(
+                self, f"device{i}_reset", pvproperty(value=0, dtype=int, name=f"device{i}_reset")
+            )
+
+            # Create the reset putter.
+            partial_reset = partial(self.reset_putter, i)
+            partial_reset.__name__ = f"reset_putter{i}"
+            getattr(self, f"device{i}_reset").putter(partial_reset)
 
             # Create the readback pv.
             setattr(
@@ -86,10 +96,12 @@ class TernaryArrayIOC(PVGroup):
         self.__dict__["_pvs_"] = OrderedDict(PVGroup.find_pvproperties(self.__dict__))
         super().__init__(*args, **kwargs)
 
-    async def general_putter(self, index, group, instance, value):
+    async def set_putter(self, index, group, instance, value):
         if value:
             await self._devices[index].set()
-        else:
+
+    async def reset_putter(self, index, group, instance, value):
+        if value:
             await self._devices[index].reset()
 
     async def general_scan(self, index, group, instance, async_lib):
@@ -97,9 +109,9 @@ class TernaryArrayIOC(PVGroup):
         await self.pvdb[f"{self.prefix}device{index}_rbv"].write(
             StateEnum(self._devices[index].state).name
         )
+        print(StateEnum(self._devices[index].state).name)
         # This is the normal way to do this, but it doesn't work correctly for this example.
         # await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
-
 
 
 class TernaryDevice(Device):
@@ -132,7 +144,11 @@ class TernaryDevice(Device):
         self._set_st = st
 
         def state_cb(value, timestamp, **kwargs):
-            self._state = self._state_enum[value].value
+            try:
+                self._state = self._state_enum[value].value
+            except KeyError:
+                raise ValueError(f"self._state_enum does not contain value: {value}")
+
         self.state_rbv.subscribe(state_cb)
 
         if value:
@@ -152,6 +168,23 @@ class TernaryDevice(Device):
         return self._state
 
 
+class ExampleFilter(TernaryDevice):
+    """
+    This class is an example about how to create a TernaryDevice specialization
+    for a specific implementation.
+    """
+
+    def __init__(self, index, *args, **kwargs):
+        super().__init__(*args,
+                         name=f'Filter{index}',
+                         set_name=f'TernaryArray:device{index}_set',
+                         reset_name=f'TernaryArray:device{index}_reset',
+                         state_name=f'TernaryArray:device{index}_rbv',
+                         state_enum=StateEnum,
+                         **kwargs)
+
+filter1 = ExampleFilter(1)
+
 class CmsFilter(TernaryDevice):
     """
     This class is an example about how to create a TernaryDevice specialization
@@ -167,9 +200,7 @@ class CmsFilter(TernaryDevice):
                          state_enum=StateEnum,
                          **kwargs)
 
-filter1 = CmsFilter(1)
 
-"""
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
         default_prefix="TernaryArray:", desc="TernaryArray IOC"
@@ -178,4 +209,3 @@ if __name__ == "__main__":
     print("Prefix =", "TernaryArray:")
     print("PVs:", list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
-"""
