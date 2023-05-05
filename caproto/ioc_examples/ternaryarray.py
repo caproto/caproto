@@ -109,9 +109,8 @@ class TernaryArrayIOC(PVGroup):
         await self.pvdb[f"{self.prefix}device{index}_rbv"].write(
             StateEnum(self._devices[index].state).name
         )
-        print(StateEnum(self._devices[index].state).name)
         # This is the normal way to do this, but it doesn't work correctly for this example.
-        # await getattr(self, f'device{index}_rbv').write(self._devices[index].state)
+        # await getattr(self, f'device{index}_rbv').write(StateEnum(self._devices[index].state).name)
 
 
 class TernaryDevice(Device):
@@ -143,6 +142,7 @@ class TernaryDevice(Device):
             return st
         self._set_st = st
 
+        # TODO: Move to init. So that device states stay accurate.
         def state_cb(value, timestamp, **kwargs):
             try:
                 self._state = self._state_enum[value].value
@@ -199,6 +199,45 @@ class CmsFilter(TernaryDevice):
                          state_name=f'XF:11BMB-OP{{Fltr:{index}}}Pos-Sts',
                          state_enum=StateEnum,
                          **kwargs)
+
+cms_filter1 = CmsFilter(1)
+
+
+class ArrayDevice(Device):
+    def __init__(self, devices, *args, **kwargs):
+        self._devices = devices
+        super().__init__(*args, **kwargs)
+
+    def set(self, values):
+        if len(values) != len(self._devices):
+            raise ValueError(f"The number of values ({len(values)}) must match "
+                             f"the number of devices ({len(self._devices)})")
+
+        st = DeviceStatus(self)
+
+        # TODO: This bool(value) make this class not general.
+        equals = [self._devices[i].state == bool(value)
+                  for i, value in enumerate(values)]
+        if all(equals):
+            st._finished()
+            return st
+        self._set_st = st
+
+        # TODO: Prevent this from being called twice.
+        for i, value in enumerate(values):
+            self._devices[i].set(value)
+
+        return st
+
+    def get(self):
+        return [device.get() for device in self._devices]
+
+    @property
+    def state(self):
+        return [device.state for device in self._devices]
+
+
+filter_array = ArrayDevice([ExampleFilter(i) for i in range(10)])
 
 
 if __name__ == "__main__":
