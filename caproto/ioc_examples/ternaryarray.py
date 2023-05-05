@@ -254,7 +254,7 @@ class ArrayDevice(Device):
             return DeviceStatus(self, success=True, done=True)
 
         # Set the value of each device and return all of the statuses anded together.
-        st = [self._devices[0].set(value)]
+        st = self._devices[0].set(value)
         for i, value in enumerate(values[1:]):
             st &= self._devices[i].set(value)
         return st
