@@ -1,4 +1,7 @@
 import asyncio
+import subprocess
+import sys
+import time
 
 from enum import Enum
 from functools import partial
@@ -253,7 +256,7 @@ class ArrayDevice(Device):
         if not any(diff):
             return DeviceStatus(self, success=True, done=True)
 
-        # Set the value of each device and return all of the statuses anded together.
+        # Set the value of each device and return a union of the statuses.
         st = self._devices[0].set(value)
         for i, value in enumerate(values[1:]):
             st &= self._devices[i].set(value)
@@ -262,9 +265,33 @@ class ArrayDevice(Device):
     def get(self):
         return [device.get() for device in self._devices]
 
-attenuator = ArrayDevice([ExampleFilter(i) for i in range(10)], name='attenuator')
+#class ArrayDevice(Device):
+#    devices = DDC({f"device{i:01}": (FilterDevice, f"PVblahblah{i}", {}_ for i in range(10))})
 
 
+#def build_array_device(N, class_name="ArrayDevice"):
+#    class_dict = {"devices": {f"device{i:01}": (FilterDevice, f"PVblahblah{i}", {}_ for i in range(N))}}
+#    bases = (Device,)
+#    return type(class_name, bases, class_dict)
+
+def start_test_ioc():
+    ioc = TernaryArrayIOC(prefix='TernaryArray:')
+    print("Prefix =", "TernaryArray:")
+    print("PVs:", list(ioc.pvdb))
+    run(ioc.pvdb)
+
+
+def test_arraydevice():
+    arraydevice = ArrayDevice([ExampleTernary(i) for i in range(10)],
+                              name='arraydevice')
+    test_ioc = subprocess.run([sys.executable, '-c', 'from caproto.ioc_examples.ternaryarray import start_test_ioc; start_test_ioc()'])
+    arraydevice.set([1,1,1,0,0,0,1,1,1,0])
+    print('output: ', test_ioc.stdout)
+    print('error: ', test_ioc.stderr)
+    test_ioc.kill()
+
+
+"""
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
         default_prefix="TernaryArray:", desc="TernaryArray IOC"
@@ -273,3 +300,4 @@ if __name__ == "__main__":
     print("Prefix =", "TernaryArray:")
     print("PVs:", list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
+"""
