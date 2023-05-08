@@ -257,7 +257,7 @@ class ArrayDevice(Device):
             return DeviceStatus(self, success=True, done=True)
 
         # Set the value of each device and return a union of the statuses.
-        st = self._devices[0].set(value)
+        st = self._devices[0].set(values[0])
         for i, value in enumerate(values[1:]):
             st &= self._devices[i].set(value)
         return st
@@ -284,11 +284,13 @@ def start_test_ioc():
 def test_arraydevice():
     arraydevice = ArrayDevice([ExampleTernary(i) for i in range(10)],
                               name='arraydevice')
-    test_ioc = subprocess.run([sys.executable, '-c', 'from caproto.ioc_examples.ternaryarray import start_test_ioc; start_test_ioc()'])
+    test_ioc = subprocess.Popen([sys.executable, '-c', 'from caproto.ioc_examples.ternaryarray import start_test_ioc; start_test_ioc()'])
     arraydevice.set([1,1,1,0,0,0,1,1,1,0])
-    print('output: ', test_ioc.stdout)
-    print('error: ', test_ioc.stderr)
+    print(1111)
+    #print('output: ', test_ioc.stdout)
+    #print('error: ', test_ioc.stderr)
     test_ioc.kill()
+    print(2222)
 
 
 """
