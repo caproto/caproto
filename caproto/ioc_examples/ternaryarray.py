@@ -222,7 +222,7 @@ class CmsFilter(TernaryDevice):
         )
 
 
-def ArrayDevice(devices):
+def ArrayDevice(devices, name=None):
     """
     A function, that behaves like a class init, that dynamically creates an
     ArrayDevice class. This is needed to set class attributes before the init.
@@ -269,18 +269,10 @@ def ArrayDevice(devices):
         raise TypeError("All devices must have the same type")
 
     _ArrayDevice = type('ArrayDevice', (_ArrayDeviceBase,), {'devices': devices})
-    return _ArrayDevice(name='ArrayDevice')
+    return _ArrayDevice(name=name)
 
-array_device = ArrayDevice([ExampleTernary(i) for i in range(10)])
+array_device = ArrayDevice([ExampleTernary(i) for i in range(10)], name='array_device')
 
-#class ArrayDevice(Device):
-#    devices = DDC({f"device{i:01}": (FilterDevice, f"PVblahblah{i}", {}_ for i in range(10))})
-
-
-#def build_array_device(N, class_name="ArrayDevice"):
-#    class_dict = {"devices": {f"device{i:01}": (FilterDevice, f"PVblahblah{i}", {}_ for i in range(N))}}
-#    bases = (Device,)
-#    return type(class_name, bases, class_dict)
 
 def start_test_ioc():
     ioc = TernaryArrayIOC(prefix='TernaryArray:')
@@ -290,21 +282,26 @@ def start_test_ioc():
 
 
 ps = None
-def process_cleanup(f):
+def test_ioc(f):
+    """
+    Decorator that starts a test ioc using subproccess,
+    calls your function and then cleans up the process.
+    """
     def wrap():
         try:
+            global ps
+            ps = subprocess.Popen([sys.executable, '-c', 'from caproto.ioc_examples.ternaryarray import start_test_ioc; start_test_ioc()'])
+            time.sleep(5)
             f()
         finally:
             ps.kill()
     return wrap
 
 
-@process_cleanup
+@test_ioc
 def test_arraydevice():
-    global ps
     arraydevice = ArrayDevice([ExampleTernary(i) for i in range(10)],
                               name='arraydevice')
-    ps = subprocess.Popen([sys.executable, '-c', 'from caproto.ioc_examples.ternaryarray import start_test_ioc; start_test_ioc()'])
     arraydevice.set([1,1,1,0,0,0,1,1,1,0])
 
 
