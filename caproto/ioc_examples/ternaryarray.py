@@ -281,16 +281,23 @@ def start_test_ioc():
     run(ioc.pvdb)
 
 
+ps = None
+def process_cleanup(f):
+    def wrap():
+        try:
+            f()
+        finally:
+            ps.kill()
+    return wrap
+
+
+@process_cleanup
 def test_arraydevice():
+    global ps
     arraydevice = ArrayDevice([ExampleTernary(i) for i in range(10)],
                               name='arraydevice')
-    test_ioc = subprocess.Popen([sys.executable, '-c', 'from caproto.ioc_examples.ternaryarray import start_test_ioc; start_test_ioc()'])
+    ps = subprocess.Popen([sys.executable, '-c', 'from caproto.ioc_examples.ternaryarray import start_test_ioc; start_test_ioc()'])
     arraydevice.set([1,1,1,0,0,0,1,1,1,0])
-    print(1111)
-    #print('output: ', test_ioc.stdout)
-    #print('error: ', test_ioc.stderr)
-    test_ioc.kill()
-    print(2222)
 
 
 """
