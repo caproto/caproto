@@ -4,7 +4,7 @@ import sys
 import time
 
 from enum import Enum
-from functools import partial
+from functools import partial, reduce
 from collections import OrderedDict
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 from ophyd import Device, DeviceStatus, EpicsSignal, EpicsSignalRO, FormattedComponent
@@ -171,9 +171,9 @@ class TernaryDevice(Device):
 
         # Write to the signal.
         if value:
-            set_cmd.set(1)
+            self.set_cmd.set(1)
         else:
-            reset_cmd.set(1)
+            self.reset_cmd.set(1)
         return st
 
     def reset(self):
@@ -222,48 +222,56 @@ class CmsFilter(TernaryDevice):
         )
 
 
-cms_filter1 = CmsFilter(1)
-
-
-class ArrayDevice(Device):
+def ArrayDevice(devices):
     """
-    An ophyd.Device that is an array of devices.
-
-    The set method takes a list of values.
-    the get method returns a list of values.
-    Parameters
-    ----------
-    devices: iterable
-        The array of ophyd devices.
+    A function, that behaves like a class init, that dynamically creates an
+    ArrayDevice class. This is needed to set class attributes before the init.
+    Adding devices in the init can subvert important ophyd code that
+    manages sub devices.
     """
-    def __init__(self, devices, *args, **kwargs):
-        types = {type(device) for device in devices}
-        if len(types) != 1:
-            raise TypeError("All devices must have the same type")
 
-        self._devices = devices
-        super().__init__(*args, **kwargs)
+    class _ArrayDeviceBase(Device):
+        """
+        An ophyd.Device that is an array of devices.
 
-    def set(self, values):
-        if len(values) != len(self._devices):
-            raise ValueError(
-                f"The number of values ({len(values)}) must match "
-                f"the number of devices ({len(self._devices)})"
-            )
+        The set method takes a list of values.
+        the get method returns a list of values.
+        Parameters
+        ----------
+        devices: iterable
+            The array of ophyd devices.
+        """
+        def set(self, values):
+            if len(values) != len(self.devices):
+                raise ValueError(
+                    f"The number of values ({len(values)}) must match "
+                    f"the number of devices ({len(self.devices)})"
+                )
 
-        # If the device already has the requested state, return a finished status.
-        diff = [self._devices[i].get() != value for i, value in enumerate(values)]
-        if not any(diff):
-            return DeviceStatus(self, success=True, done=True)
+            # If the device already has the requested state, return a finished status.
+            diff = [self.devices[i].get() != value for i, value in enumerate(values)]
+            if not any(diff):
+                return DeviceStatus(self, success=True, done=True)
 
-        # Set the value of each device and return a union of the statuses.
-        st = self._devices[0].set(values[0])
-        for i, value in enumerate(values[1:]):
-            st &= self._devices[i].set(value)
-        return st
+            # Set the value of each device and return a union of the statuses.
+            statuses = [self.devices[i].set(value) for i, value in enumerate(values)]
+            st = reduce(lambda a, b: a & b, statuses)
+            return st
 
-    def get(self):
-        return [device.get() for device in self._devices]
+        def reset(self):
+            self.set([0 for i in range(len(self.devices))])
+
+        def get(self):
+            return [device.get() for device in self.devices]
+
+    types = {type(device) for device in devices}
+    if len(types) != 1:
+        raise TypeError("All devices must have the same type")
+
+    _ArrayDevice = type('ArrayDevice', (_ArrayDeviceBase,), {'devices': devices})
+    return _ArrayDevice(name='ArrayDevice')
+
+array_device = ArrayDevice([ExampleTernary(i) for i in range(10)])
 
 #class ArrayDevice(Device):
 #    devices = DDC({f"device{i:01}": (FilterDevice, f"PVblahblah{i}", {}_ for i in range(10))})
