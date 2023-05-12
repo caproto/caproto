@@ -28,7 +28,7 @@ class TernaryDeviceSim:
 
     def __init__(self, delay=0.5):
         self._delay = delay
-        self._state = None
+        self._state = False
 
     async def set(self):
         if not self._state:
@@ -127,7 +127,7 @@ class TernaryDevice(Device):
 
     set_cmd = FormattedComponent(EpicsSignal, "{self._set_name}")
     reset_cmd = FormattedComponent(EpicsSignal, "{self._reset_name}")
-    state_rbv = FormattedComponent(EpicsSignalRO, "{self._state_name}")
+    state_rbv = FormattedComponent(EpicsSignalRO, "{self._state_name}", string=True)
 
     def __init__(
         self, *args, set_name, reset_name, state_name, state_enum, **kwargs
@@ -163,6 +163,7 @@ class TernaryDevice(Device):
                 raise ValueError(f"self._state_enum does not contain value: {value}")
             if self._state == target_value:
                 self._set_st = None
+                self.state_rbv.clear_sub(state_cb)
                 st._finished()
 
         # Subscribe the callback to the readback signal.
@@ -222,7 +223,7 @@ class CmsFilter(TernaryDevice):
         )
 
 
-def ArrayDevice(devices, name=None):
+def ArrayDevice(devices, *args, **kwargs):
     """
     A function, that behaves like a class init, that dynamically creates an
     ArrayDevice class. This is needed to set class attributes before the init.
@@ -251,7 +252,7 @@ def ArrayDevice(devices, name=None):
             # If the device already has the requested state, return a finished status.
             diff = [self.devices[i].get() != value for i, value in enumerate(values)]
             if not any(diff):
-                return DeviceStatus(self, success=True, done=True)
+                return DeviceStatus(self)._finished()
 
             # Set the value of each device and return a union of the statuses.
             statuses = [self.devices[i].set(value) for i, value in enumerate(values)]
@@ -269,7 +270,7 @@ def ArrayDevice(devices, name=None):
         raise TypeError("All devices must have the same type")
 
     _ArrayDevice = type('ArrayDevice', (_ArrayDeviceBase,), {'devices': devices})
-    return _ArrayDevice(name=name)
+    return _ArrayDevice(*args, **kwargs)
 
 array_device = ArrayDevice([ExampleTernary(i) for i in range(10)], name='array_device')
 
@@ -302,7 +303,10 @@ def test_ioc(f):
 def test_arraydevice():
     arraydevice = ArrayDevice([ExampleTernary(i) for i in range(10)],
                               name='arraydevice')
-    arraydevice.set([1,1,1,0,0,0,1,1,1,0])
+    values = [1,1,1,0,0,0,1,1,1,0]
+    arraydevice.set(values)
+    print(arraydevice.get())
+    assert arraydevice.get() == values
 
 
 """
