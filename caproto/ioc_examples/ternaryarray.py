@@ -305,6 +305,7 @@ def test_arraydevice():
                               name='arraydevice')
     values = [1,1,1,0,0,0,1,1,1,0]
     arraydevice.set(values)
+    time.sleep(1)
     print(arraydevice.get())
     assert arraydevice.get() == values
 
