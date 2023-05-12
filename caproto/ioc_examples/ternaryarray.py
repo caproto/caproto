@@ -1,3 +1,25 @@
+"""
+This example demonstates:
+- How to do dynamic PV creation in a caproto IOC.
+- How to test ophyd devices using a caproto IOC.
+- How to make an ophyd device that has an array of devices.
+- How to dynamically create an ophyd device.
+
+This example code includes:
+- TernaryDeviceSim, a ternary device simulator.
+- TernaryArrayIOC, an IOC that has an array of TernaryDevices.
+- TernaryDevice, an ophyd device.
+- ArrayDevice, an ophyd devices which can wrap an array of similar devices.
+- test_ioc decorator, which starts and cleans up an IOC for use with tests.
+
+A Ternary device is a device with a control signal and three states.
+This is a very common type of device. Examples include: valves, filters, and shutters.
+
+The IOC can also be started like this:
+```
+python -c 'from caproto.ioc_examples.ternaryarray import start_test_ioc; start_test_ioc()'
+```
+"""
 import asyncio
 import subprocess
 import sys
@@ -310,7 +332,6 @@ def test_arraydevice():
     assert arraydevice.get() == values
 
 
-"""
 if __name__ == "__main__":
     ioc_options, run_options = ioc_arg_parser(
         default_prefix="TernaryArray:", desc="TernaryArray IOC"
@@ -319,4 +340,3 @@ if __name__ == "__main__":
     print("Prefix =", "TernaryArray:")
     print("PVs:", list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
-"""
