@@ -3,7 +3,7 @@ import sys
 import time
 import weakref
 from collections import ChainMap, defaultdict, deque, namedtuple
-from typing import DefaultDict, Deque
+from typing import DefaultDict, Deque, Tuple
 
 import caproto as ca
 from caproto import (CaprotoKeyError, CaprotoNetworkError, CaprotoRuntimeError,
@@ -889,34 +889,51 @@ class Context:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
             sub_specs, metadata, values, flags, sub = await self.subscription_queue.get()
-            if sub is None:
-                # Broadcast to all Subscriptions for the relevant
-                # SubscriptionSpec(s).
-                for sub_spec in sub_specs:
-                    for sub in self.subscriptions[sub_spec]:
-                        await self._subscription_queue_send(
-                            sub_spec,
-                            sub,
-                            metadata=metadata,
-                            values=values,
-                            flags=flags,
-                        )
-            else:
-                # A specific Subscription has been specified, which means this
-                # specific update was prompted by Subscription being new, not
-                # prompted by a new value. The update should only be sent to that
-                # specific Subscription.
-                if len(sub_specs) != 1:
-                    raise RuntimeError("Unexpected sub_specs length")
+            await self._subscription_queue_iteration(
+                sub_specs,
+                metadata,
+                values,
+                flags,
+                sub,
+            )
 
-                sub_spec, = sub_specs
-                await self._subscription_queue_send(
-                    sub_spec,
-                    sub,
-                    metadata=metadata,
-                    values=values,
-                    flags=flags,
-                )
+    async def _subscription_queue_iteration(
+        self,
+        sub_specs: Tuple[SubscriptionSpec, ...],
+        metadata: DbrTypeBase,
+        values,
+        flags: int,
+        sub: Subscription,
+    ):
+        """This handles a single queue item from ``subscription_queue``."""
+        if sub is None:
+            # Broadcast to all Subscriptions for the relevant
+            # SubscriptionSpec(s).
+            for sub_spec in sub_specs:
+                for sub in self.subscriptions[sub_spec]:
+                    await self._subscription_queue_send(
+                        sub_spec,
+                        sub,
+                        metadata=metadata,
+                        values=values,
+                        flags=flags,
+                    )
+        else:
+            # A specific Subscription has been specified, which means this
+            # specific update was prompted by Subscription being new, not
+            # prompted by a new value. The update should only be sent to that
+            # specific Subscription.
+            if len(sub_specs) != 1:
+                raise RuntimeError("Unexpected sub_specs length")
+
+            sub_spec, = sub_specs
+            await self._subscription_queue_send(
+                sub_spec,
+                sub,
+                metadata=metadata,
+                values=values,
+                flags=flags,
+            )
 
     async def _subscription_queue_send(
         self,
