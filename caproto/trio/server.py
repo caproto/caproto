@@ -142,7 +142,7 @@ class VirtualCircuit(_VirtualCircuit):
         self.subscription_queue = self.subscription_chan.send
 
         self.write_event = Event()
-        self.events_on = trio.Event()
+        self.events_on = Event()
 
     async def run(self):
         await self.nursery.start(self.command_queue_loop)
