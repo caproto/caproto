@@ -115,6 +115,7 @@ class VirtualCircuit:
         self.unexpired_updates = defaultdict(
             lambda: deque(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
         self.most_recent_updates = {}
+        self.subscriptions_to_resend = {}
         # This dict is passed to the loggers.
         self._tags = {'their_address': self.circuit.address,
                       'our_address': self.circuit.our_address,
@@ -311,6 +312,7 @@ class VirtualCircuit:
             await maybe_awaitable
         commands = deque()
         latency_limit = HIGH_LOAD_TIMEOUT
+        deadline = 0.0
         while True:
             send_now = False
             commands.clear()
@@ -431,6 +433,9 @@ class VirtualCircuit:
         for sub_spec, sub in to_remove:
             self.subscriptions[sub_spec].remove(sub)
             self.most_recent_updates.pop(sub.subscriptionid, None)
+            resends = self.subscriptions_to_resend.get(sub_spec, [])
+            if sub in resends:
+                resends.remove(sub)
             self.context.subscriptions[sub_spec].remove(sub)
             self.context.last_dead_band.pop(sub, None)
             self.context.last_sync_edge_update.pop(sub, None)
@@ -653,27 +658,38 @@ class VirtualCircuit:
                                         data_type=command.data_type,
                                         data_count=data_count)]
         elif isinstance(command, ca.EventsOnRequest):
+            self.circuit.log.info("Client at %s:%d has turned events on.",
+                                  *self.circuit.address)
             # Immediately send most recent updates for all subscriptions.
             most_recent_updates = list(self.most_recent_updates.values())
             self.most_recent_updates.clear()
             if most_recent_updates:
                 await self.send(*most_recent_updates)
+
+            resend = list(self.subscriptions_to_resend.items())
+            self.subscriptions_to_resend.clear()
+            for sub_spec, subs in resend:
+                for sub in subs:
+                    await sub.db_entry.subscribe(
+                        self.context.subscription_queue,
+                        sub_spec=sub_spec,
+                        sub=sub,
+                    )
+
             maybe_awaitable = self.events_on.set()
             # The curio backend makes this an awaitable thing.
             if maybe_awaitable is not None:
                 await maybe_awaitable
-            self.circuit.log.info("Client at %s:%d has turned events on.",
-                                  *self.circuit.address)
             to_send = []
         elif isinstance(command, ca.EventsOffRequest):
+            self.circuit.log.info("Client at %s:%d has turned events off.",
+                                  *self.circuit.address)
             # The client has signaled that it does not think it will be able to
             # catch up to the backlog. Clear all updates queued to be sent...
             self.unexpired_updates.clear()
             # ...and tell the Context that any future updates from ChannelData
             # should not be added to this circuit's queue until further notice.
             self.events_on.clear()
-            self.circuit.log.info("Client at %s:%d has turned events off.",
-                                  *self.circuit.address)
             to_send = []
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = self._get_db_entry_from_command(command)
@@ -1023,8 +1039,16 @@ class Context:
 
         # This is a queue with the commands from _all_ subscriptions on this
         # circuit.
+
+        def destroyed(_):
+            to_resend = circuit.subscriptions_to_resend.setdefault(sub_spec, [])
+            if sub not in to_resend:
+                to_resend.append(sub)
+
         try:
-            await circuit.subscription_queue.put(weakref.ref(command))
+            await circuit.subscription_queue.put(
+                weakref.ref(command, destroyed)
+            )
         except circuit.QueueFull:
             # We have hit the overall max for subscription backlog.
             circuit.log.warning(
