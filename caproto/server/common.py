@@ -114,7 +114,7 @@ class VirtualCircuit:
         self.subscriptions = defaultdict(deque)
         self.unexpired_updates = defaultdict(
             lambda: deque(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
-        self.most_recent_updates = {}
+        self.subscriptions_to_resend = {}
         # This dict is passed to the loggers.
         self._tags = {'their_address': self.circuit.address,
                       'our_address': self.circuit.our_address,
@@ -311,6 +311,7 @@ class VirtualCircuit:
             await maybe_awaitable
         commands = deque()
         latency_limit = HIGH_LOAD_TIMEOUT
+        deadline = 0.0
         while True:
             send_now = False
             commands.clear()
@@ -430,7 +431,9 @@ class VirtualCircuit:
                     to_remove.append((sub_spec, sub))
         for sub_spec, sub in to_remove:
             self.subscriptions[sub_spec].remove(sub)
-            self.most_recent_updates.pop(sub.subscriptionid, None)
+            resends = self.subscriptions_to_resend.get(sub_spec, [])
+            if sub in resends:
+                resends.remove(sub)
             self.context.subscriptions[sub_spec].remove(sub)
             self.context.last_dead_band.pop(sub, None)
             self.context.last_sync_edge_update.pop(sub, None)
@@ -653,27 +656,36 @@ class VirtualCircuit:
                                         data_type=command.data_type,
                                         data_count=data_count)]
         elif isinstance(command, ca.EventsOnRequest):
-            # Immediately send most recent updates for all subscriptions.
-            most_recent_updates = list(self.most_recent_updates.values())
-            self.most_recent_updates.clear()
-            if most_recent_updates:
-                await self.send(*most_recent_updates)
+            self.circuit.log.info("Client at %s:%d has turned events on.",
+                                  *self.circuit.address)
+
             maybe_awaitable = self.events_on.set()
             # The curio backend makes this an awaitable thing.
             if maybe_awaitable is not None:
                 await maybe_awaitable
-            self.circuit.log.info("Client at %s:%d has turned events on.",
-                                  *self.circuit.address)
+
+            # Send all subscriptions that were marked as "to be sent" during
+            # the period that events were off.
+            resend = list(self.subscriptions_to_resend.items())
+            self.subscriptions_to_resend.clear()
+            for sub_spec, subs in resend:
+                for sub in subs:
+                    await sub.db_entry.subscribe(
+                        self.context.subscription_queue,
+                        sub_spec=sub_spec,
+                        sub=sub,
+                    )
+
             to_send = []
         elif isinstance(command, ca.EventsOffRequest):
-            # The client has signaled that it does not think it will be able to
-            # catch up to the backlog. Clear all updates queued to be sent...
-            self.unexpired_updates.clear()
+            self.circuit.log.info("Client at %s:%d has turned events off.",
+                                  *self.circuit.address)
             # ...and tell the Context that any future updates from ChannelData
             # should not be added to this circuit's queue until further notice.
             self.events_on.clear()
-            self.circuit.log.info("Client at %s:%d has turned events off.",
-                                  *self.circuit.address)
+            # The client has signaled that it does not think it will be able to
+            # catch up to the backlog. Clear all updates queued to be sent...
+            self.unexpired_updates.clear()
             to_send = []
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = self._get_db_entry_from_command(command)
@@ -948,6 +960,18 @@ class Context:
         This queue receives updates that match the db_entry, data_type and mask
         ("subscription spec") of one or more subscriptions.
         '''
+        circuit = sub.circuit
+
+        # If this circuit has been sent EventsOff by the client, do not queue
+        # any updates until the client sends EventsOn to signal that it has
+        # caught up. Instead, mark this subscription as something that needs to
+        # be redone when events come back on.
+        if not circuit.events_on.is_set():
+            to_resend = circuit.subscriptions_to_resend.setdefault(sub_spec, [])
+            if sub not in to_resend:
+                to_resend.append(sub)
+            return
+
         # Pack the data and metadata into an EventAddResponse and send it.  We
         # have to make a new response for each channel because each may have a
         # different requested data_count.
@@ -1007,24 +1031,29 @@ class Context:
         # the line it will dropped on the floor instead of sent. This
         # effectively prioritizes sending the client "new news" instead of "old
         # news".
-        circuit = sub.circuit
-
-        # If this circuit has been sent EventsOff by the client, do not queue
-        # any updates until the client sends EventsOn to signal that it has
-        # caught up. But stash the most recent update for each subscription,
-        # which will immediately send when we turn events back on.
-        if not circuit.events_on.is_set():
-            circuit.most_recent_updates[sub.subscriptionid] = command
-            return
 
         # This is an OrderedBoundedSet, a set with a maxlen, containing only
         # commands for this particular subscription.
         circuit.unexpired_updates[sub.subscriptionid].append(command)
 
+        def destroyed(_):
+            # If events are on, we hit a high load scenario and should drop
+            # this subscription entirely.
+            if circuit.events_on.is_set():
+                return
+
+            # However, if events are off, the data likely just got garbage
+            # collected because the client requested as much.
+            # Track this as a subscription to resend when events come back
+            # online, but don't store the data.
+            to_resend = circuit.subscriptions_to_resend.setdefault(sub_spec, [])
+            if sub not in to_resend:
+                to_resend.append(sub)
+
         # This is a queue with the commands from _all_ subscriptions on this
         # circuit.
         try:
-            await circuit.subscription_queue.put(weakref.ref(command))
+            await circuit.subscription_queue.put(weakref.ref(command, destroyed))
         except circuit.QueueFull:
             # We have hit the overall max for subscription backlog.
             circuit.log.warning(
