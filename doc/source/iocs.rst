@@ -727,6 +727,35 @@ If PVGroup data is sourced from a database, real device, website, etc,
 then a different approach may be more appropriate.  See below in the "how do I"
 section.
 
+Help!
+=====
+
+
+My server is saying "High load"!
+--------------------------------
+
+You may have a real issue in your code, or you may have clients which are
+saturating your server with requests.
+
+Take a look at your code and see that you don't have any synchronous (i.e.,
+threaded) code being run in your async functions.  This is really important.
+Defer it to an executor and you can avoid further headaches: see
+`here <https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.run_in_executor>`_.
+
+If you just have a lot of clients hitting your server without any apparent
+negative effect, you can customize caproto's server settings to not display
+this message.
+
+This warning says my PV will take up a considerable amount of memory...
+-----------------------------------------------------------------------
+
+It's probably true and it's there to save you from the default settings.
+
+You may either set ``max_subscription_backlog`` for each of your big PVs
+manually, or let caproto tweak it for you in an automated fashion.
+
+See the environment variable section for details on what each variable means.
+
 How do I...
 ===========
 
@@ -981,6 +1010,13 @@ A more concrete example with aiohttp:
                         status=AlarmStatus.COMM,
                         severity=AlarmSeverity.MAJOR_ALARM,
                     )
+
+
+... interact with threaded/non-async code, functions, and libraries?
+--------------------------------------------------------------------
+
+Defer it to an executor:
+`here <https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.run_in_executor>`_.
 
 
 ... get rid of PVGroup and pvproperty? I hate them!
