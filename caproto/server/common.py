@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import logging
 import sys
 import time
+import typing
 import weakref
 from collections import ChainMap, defaultdict, deque, namedtuple
 from typing import DefaultDict, Deque, Tuple
@@ -13,6 +16,12 @@ from caproto import (CaprotoKeyError, CaprotoNetworkError, CaprotoRuntimeError,
 from .._constants import MAX_UDP_RECV
 from .._dbr import DbrTypeBase, _LongStringChannelType
 from .._utils import apply_deadband_filter
+
+if typing.TYPE_CHECKING:
+    from .._circuit import ServerChannel, SubscriptionType
+    from .._data import ChannelData
+    from .._utils import ChannelFilter
+
 
 # ** Tuning this parameters will affect the servers' performance **
 # ** under high load. **
@@ -68,6 +77,14 @@ class Subscription(namedtuple('Subscription',
     db_entry : ChannelData
         The database entry
     '''
+    mask: SubscriptionType
+    channel_filter: ChannelFilter
+    circuit: VirtualCircuit
+    channel: ServerChannel
+    data_type: ChannelType
+    data_count: int
+    subscriptionid: int
+    db_entry: ChannelData
 
 
 class SubscriptionSpec(namedtuple('SubscriptionSpec',
@@ -92,6 +109,10 @@ class SubscriptionSpec(namedtuple('SubscriptionSpec',
         The channel filter specified, including timestamp, deadband,
         array and sync options.
     '''
+    db_entry: ChannelData
+    data_type_name: str
+    mask: SubscriptionType
+    channel_filter: ChannelFilter
 
 
 host_endian = ('>' if sys.byteorder == 'big' else '<')
@@ -1034,6 +1055,16 @@ class Context:
 
         # This is an OrderedBoundedSet, a set with a maxlen, containing only
         # commands for this particular subscription.
+
+        if sub.subscriptionid not in circuit.unexpired_updates:
+            circuit.unexpired_updates[sub.subscriptionid] = deque(
+                maxlen=getattr(
+                    sub.db_entry,
+                    "max_subscription_backlog",
+                    ca.MAX_SUBSCRIPTION_BACKLOG,
+                )
+            )
+
         circuit.unexpired_updates[sub.subscriptionid].append(command)
 
         def destroyed(_):

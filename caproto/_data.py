@@ -4,12 +4,14 @@
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
 import copy
+import logging
 import time
 import weakref
 from collections import defaultdict, namedtuple
 from collections.abc import Iterable
 from typing import Any
 
+from . import _constants as constants
 from ._backend import backend
 from ._commands import parse_metadata
 from ._constants import MAX_ENUM_STATES, MAX_ENUM_STRING_SIZE
@@ -35,6 +37,8 @@ __all__ = ('Forbidden',
            'ChannelString',
            'SkipWrite',
            )
+
+logger = logging.getLogger(__name__)
 
 SubscriptionUpdate = namedtuple('SubscriptionUpdate',
                                 ('sub_specs', 'metadata', 'values',
@@ -270,10 +274,19 @@ class ChannelData:
     data_type = ChannelType.LONG
     default_value: Any = 0
     _compatible_array_types = {}
+    max_subscription_backlog: int
 
-    def __init__(self, *, alarm=None, value=None, timestamp=None,
-                 max_length=None, string_encoding='latin-1',
-                 reported_record_type='caproto'):
+    def __init__(
+        self,
+        *,
+        alarm=None,
+        value=None,
+        timestamp=None,
+        max_length=None,
+        string_encoding="latin-1",
+        reported_record_type="caproto",
+        max_subscription_backlog: int = constants.MAX_SUBSCRIPTION_BACKLOG,
+    ):
         if timestamp is None:
             timestamp = time.time()
         if alarm is None:
@@ -318,6 +331,7 @@ class ChannelData:
         self._content = {}
         self._snapshots = defaultdict(dict)
         self._fill_at_next_write = list()
+        self.max_subscription_backlog = max_subscription_backlog
 
     def __getstate__(self):
         state = dict(self.__dict__)
@@ -1668,13 +1682,27 @@ class ChannelChar(ChannelData):
     data_type = ChannelType.CHAR
     _compatible_array_types = {'|u1', '|i1', '|b1'}
 
-    def __init__(self, *, alarm=None, value=None, timestamp=None,
-                 max_length=None, string_encoding='latin-1',
-                 reported_record_type='caproto', report_as_string=False):
-        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
-                         max_length=max_length,
-                         string_encoding=string_encoding,
-                         reported_record_type=reported_record_type)
+    def __init__(
+        self,
+        *,
+        alarm=None,
+        value=None,
+        timestamp=None,
+        max_length=None,
+        string_encoding="latin-1",
+        reported_record_type="caproto",
+        report_as_string=False,
+        **kwargs
+    ):
+        super().__init__(
+            alarm=alarm,
+            value=value,
+            timestamp=timestamp,
+            max_length=max_length,
+            string_encoding=string_encoding,
+            reported_record_type=reported_record_type,
+            **kwargs,
+        )
 
         if report_as_string:
             self.data_type = ChannelType.STRING
@@ -1762,11 +1790,17 @@ class ChannelString(ChannelData):
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
                  max_length=None, string_encoding='latin-1',
-                 reported_record_type='caproto', long_string_max_length=81):
-        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
-                         max_length=max_length,
-                         string_encoding=string_encoding,
-                         reported_record_type=reported_record_type)
+                 reported_record_type='caproto', long_string_max_length=81,
+                 **kwargs):
+        super().__init__(
+            alarm=alarm,
+            value=value,
+            timestamp=timestamp,
+            max_length=max_length,
+            string_encoding=string_encoding,
+            reported_record_type=reported_record_type,
+            **kwargs,
+        )
 
         self._long_string_max_length = long_string_max_length
 
