@@ -27,11 +27,15 @@ NO_REPLY = 5
 # NOTE: End of constants which should not be modified under any circumstances.
 # NOTE: The following are *environment-configurable*, per-process constants.
 #
-STALE_SEARCH_EXPIRATION = float(os.environ.get("CAPROTO_STALE_SEARCH_EXPIRATION", 10.0))
+STALE_SEARCH_EXPIRATION = float(
+    os.environ.get("CAPROTO_STALE_SEARCH_EXPIRATION_SEC", 10.0)
+)
 
 # How long to wait between EchoRequest and EchoResponse before concluding that
 # server is unresponsive, in seconds
-RESPONSIVENESS_TIMEOUT = int(os.environ.get("CAPROTO_RESPONSIVENESS_TIMEOUT", 5))
+RESPONSIVENESS_TIMEOUT = float(
+    os.environ.get("CAPROTO_RESPONSIVENESS_TIMEOUT_SEC", 5)
+)
 
 # total per circuit not per subscription, by default.
 MAX_TOTAL_SUBSCRIPTION_BACKLOG = int(

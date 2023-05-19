@@ -135,6 +135,40 @@ Environment Variables
        this many seconds for the currently-processing Write[Notify]Request to
        finish.
 
+.. list-table:: Shared Environment Variables
+   :header-rows: 1
+
+   * - CAPROTO_STALE_SEARCH_EXPIRATION_SEC
+     - 10.0
+     - How long, in seconds, after which to consider searches for PVs "stale".
+   * - CAPROTO_RESPONSIVENESS_TIMEOUT_SEC
+     - 5
+     - How long to wait between EchoRequest and EchoResponse before concluding that
+       server is unresponsive, in seconds.
+   * - CAPROTO_MAX_TOTAL_SUBSCRIPTION_BACKLOG
+     - 10000
+     - Total per circuit (not per subscription), by default.
+   * - CAPROTO_SUBSCRIPTION_BACKLOG_WARN_THRESHOLD_ELEMENTS
+     - 15000000
+     - If any channel has would have over this many elements when its subscription
+       queue is full, warn about it. If you have a 1,000,000 element array,
+       the warning would hapen at a subscription backlog of 16, as 16 *
+       1,000,000 is above this default threshold.
+   * - CAPROTO_SUBSCRIPTION_BACKLOG_REDUCE_AT_WARN_LEVEL
+     - "y" ("y", "yes", "1", or "true")
+     - Automatically reduce subscription backlog for PVs that meet the warning
+       threshold.
+   * - CAPROTO_MIN_SUBSCRIPTION_BACKLOG
+     - 10
+     - This is the default minimum, if we find ourselves above that threshold.
+   * - CAPROTO_MAX_SUBSCRIPTION_BACKLOG
+     - 1000
+     - This is the default, per subscription.
+   * - CAPROTO_MAX_COMMAND_BACKLOG
+     - 10000
+     - This is the maximum number of commands caproto will keep in a queue for
+       sending out to clients. This typically should not need adjustment.
+
 .. list-table:: IOC Helper Environment Variables
    :header-rows: 1
 
