@@ -142,8 +142,7 @@ class VirtualCircuit:
         # The structure of self.subscriptions is:
         # {SubscriptionSpec: deque([Subscription, Subscription, ...]), ...}
         self.subscriptions = defaultdict(deque)
-        self.unexpired_updates = defaultdict(
-            lambda: deque(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
+        self.unexpired_updates = {}
         self.subscriptions_to_resend = {}
         self.time_events_toggled = time.monotonic()
         # This dict is passed to the loggers.
@@ -1079,11 +1078,7 @@ class Context:
 
         if sub.subscriptionid not in circuit.unexpired_updates:
             circuit.unexpired_updates[sub.subscriptionid] = deque(
-                maxlen=getattr(
-                    sub.db_entry,
-                    "max_subscription_backlog",
-                    ca.MAX_SUBSCRIPTION_BACKLOG,
-                )
+                maxlen=sub.db_entry.max_subscription_backlog,
             )
 
         circuit.unexpired_updates[sub.subscriptionid].append(command)
