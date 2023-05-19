@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 import typing
@@ -28,17 +29,21 @@ if typing.TYPE_CHECKING:
 # If the queue of subscriptions to has a new update ready within this timeout,
 # we consider ourselves under high load and trade accept some latency for some
 # efficiency.
-HIGH_LOAD_TIMEOUT = 0.01
+HIGH_LOAD_TIMEOUT = float(os.environ.get("CAPROTO_SERVER_HIGH_LOAD_TIMEOUT", 0.01))
+# Warn the user if packets are delayed by more than this amount.
+HIGH_LOAD_WARN_LATENCY = float(
+    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_WARN_LATENCY", 0.01)
+)
 # When a batch of subscription updates has this many bytes or more, send it.
-SUB_BATCH_THRESH = 2**16
+SUB_BATCH_THRESH = int(os.environ.get("CAPROTO_SERVER_SUB_BATCH_THRESH", 2 ** 16))
 # Tune this to change the max time between packets. If it's too high, the
 # client will experience long gaps when the server is under load. If it's too
 # low, the *overall* latency will be higher because the server will have to
 # waste time bundling many small packets.
-MAX_LATENCY = 1
+MAX_LATENCY = int(os.environ.get("CAPROTO_SERVER_MAX_LATENCY", 1))
 # If a Read[Notify]Request or EventAddRequest is received, wait for up to this
 # long for the currently-processing Write[Notify]Request to finish.
-WRITE_LOCK_TIMEOUT = 0.001
+WRITE_LOCK_TIMEOUT = float(os.environ.get("CAPROTO_SERVER_WRITE_LOCK_TIMEOUT", 0.001))
 
 
 class DisconnectedCircuit(Exception):
@@ -407,13 +412,16 @@ class VirtualCircuit:
                 break
             try:
                 len_commands = len(commands)
-                if num_expired:
+                if num_expired and self.events_on.is_set():
                     self.log.warning("High load. Dropped %d responses.", num_expired)
-                if len_commands > 1:
-                    self.log.info(
-                        "High load. Batched %d commands (%dB) with %.4fs latency.",
-                        len_commands, commands_bytes,
-                        now - deadline + latency_limit)
+
+                if len_commands > 1 and HIGH_LOAD_WARN_LATENCY > 0:
+                    latency = now - deadline + latency_limit
+                    if latency >= HIGH_LOAD_WARN_LATENCY:
+                        self.log.warning(
+                            "High load. Batched %d commands (%dB) with %.4fs latency.",
+                            len_commands, commands_bytes, latency
+                        )
 
                 # Ensure at the last possible moment that we don't send
                 # responses for Subscriptions that have been canceled at some
