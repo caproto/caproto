@@ -30,9 +30,13 @@ if typing.TYPE_CHECKING:
 # we consider ourselves under high load and trade accept some latency for some
 # efficiency.
 HIGH_LOAD_TIMEOUT = float(os.environ.get("CAPROTO_SERVER_HIGH_LOAD_TIMEOUT", 0.01))
-# Warn the user if packets are delayed by more than this amount.
-HIGH_LOAD_WARN_LATENCY = float(
-    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_WARN_LATENCY", 0.01)
+HIGH_LOAD_EVENT_TIME_THRESHOLD = float(
+    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_EVENT_TIME_THRESHOLD", 0.1)
+)
+# Warn the user if packets are delayed by more than this amount: 30ms
+# Set to 0 to disable the warning entirely.
+HIGH_LOAD_WARN_LATENCY_SEC = float(
+    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_WARN_LATENCY_SEC", 0.03)
 )
 # When a batch of subscription updates has this many bytes or more, send it.
 SUB_BATCH_THRESH = int(os.environ.get("CAPROTO_SERVER_SUB_BATCH_THRESH", 2 ** 16))
@@ -141,6 +145,7 @@ class VirtualCircuit:
         self.unexpired_updates = defaultdict(
             lambda: deque(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
         self.subscriptions_to_resend = {}
+        self.time_events_toggled = time.monotonic()
         # This dict is passed to the loggers.
         self._tags = {'their_address': self.circuit.address,
                       'our_address': self.circuit.our_address,
@@ -412,12 +417,18 @@ class VirtualCircuit:
                 break
             try:
                 len_commands = len(commands)
-                if num_expired and self.events_on.is_set():
+
+                # If events are toggled by the client, subscriptions values get
+                # garbage- collected.  It's not a high load situation.  Let's
+                # warn only if we're relatively sure that it wasn't due to
+                # recent event toggling.
+                time_since_events_toggled = time.monotonic() - self.time_events_toggled
+                if num_expired and time_since_events_toggled > HIGH_LOAD_EVENT_TIME_THRESHOLD:
                     self.log.warning("High load. Dropped %d responses.", num_expired)
 
-                if len_commands > 1 and HIGH_LOAD_WARN_LATENCY > 0:
+                if len_commands > 1 and HIGH_LOAD_WARN_LATENCY_SEC > 0:
                     latency = now - deadline + latency_limit
-                    if latency >= HIGH_LOAD_WARN_LATENCY:
+                    if latency >= HIGH_LOAD_WARN_LATENCY_SEC:
                         self.log.warning(
                             "High load. Batched %d commands (%dB) with %.4fs latency.",
                             len_commands, commands_bytes, latency
@@ -688,6 +699,7 @@ class VirtualCircuit:
             self.circuit.log.info("Client at %s:%d has turned events on.",
                                   *self.circuit.address)
 
+            self.time_events_toggled = time.monotonic()
             maybe_awaitable = self.events_on.set()
             # The curio backend makes this an awaitable thing.
             if maybe_awaitable is not None:
@@ -709,6 +721,7 @@ class VirtualCircuit:
         elif isinstance(command, ca.EventsOffRequest):
             self.circuit.log.info("Client at %s:%d has turned events off.",
                                   *self.circuit.address)
+            self.time_events_toggled = time.monotonic()
             # ...and tell the Context that any future updates from ChannelData
             # should not be added to this circuit's queue until further notice.
             self.events_on.clear()
