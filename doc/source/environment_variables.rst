@@ -16,11 +16,11 @@ Environment Variables
      - "latin-1"
      - The default string encoding to use.
    * - CAPROTO_CLIENT_AUTOMONITOR_MAXLENGTH
-      - 65536
-      - Toggle automatic monitoring of PVs based on this.
+     - 65536
+     - Toggle automatic monitoring of PVs based on this.
    * - CAPROTO_CLIENT_BEACON_MARGIN
-      - 1
-      - The margin after EPICS_CA_CONN_TMO for beacons to arrive (seconds).
+     - 1
+     - The margin after EPICS_CA_CONN_TMO for beacons to arrive (seconds).
    * - CAPROTO_CLIENT_EVENT_ADD_BATCH_MAX_BYTES
      - 2**16 = 65536
      - Requests are batched when sent on the wire if they are under this
