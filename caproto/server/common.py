@@ -29,9 +29,11 @@ if typing.TYPE_CHECKING:
 # If the queue of subscriptions to has a new update ready within this timeout,
 # we consider ourselves under high load and trade accept some latency for some
 # efficiency.
-HIGH_LOAD_TIMEOUT = float(os.environ.get("CAPROTO_SERVER_HIGH_LOAD_TIMEOUT", 0.01))
+HIGH_LOAD_TIMEOUT = float(
+    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_TIMEOUT_SEC", 0.01)
+)
 HIGH_LOAD_EVENT_TIME_THRESHOLD = float(
-    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_EVENT_TIME_THRESHOLD", 0.1)
+    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_EVENT_TIME_THRESHOLD_SEC", 0.1)
 )
 # Warn the user if packets are delayed by more than this amount: 30ms
 # Set to 0 to disable the warning entirely.
@@ -44,10 +46,12 @@ SUB_BATCH_THRESH = int(os.environ.get("CAPROTO_SERVER_SUB_BATCH_THRESH", 2 ** 16
 # client will experience long gaps when the server is under load. If it's too
 # low, the *overall* latency will be higher because the server will have to
 # waste time bundling many small packets.
-MAX_LATENCY = int(os.environ.get("CAPROTO_SERVER_MAX_LATENCY", 1))
+MAX_LATENCY = float(os.environ.get("CAPROTO_SERVER_MAX_LATENCY_SEC", 1.0))
 # If a Read[Notify]Request or EventAddRequest is received, wait for up to this
 # long for the currently-processing Write[Notify]Request to finish.
-WRITE_LOCK_TIMEOUT = float(os.environ.get("CAPROTO_SERVER_WRITE_LOCK_TIMEOUT", 0.001))
+WRITE_LOCK_TIMEOUT = float(
+    os.environ.get("CAPROTO_SERVER_WRITE_LOCK_TIMEOUT_SEC", 0.001)
+)
 
 
 class DisconnectedCircuit(Exception):
