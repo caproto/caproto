@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 import logging
+import os
 import sys
 import time
+import typing
 import weakref
 from collections import ChainMap, defaultdict, deque, namedtuple
 from typing import DefaultDict, Deque, Tuple
@@ -14,22 +18,40 @@ from .._constants import MAX_UDP_RECV
 from .._dbr import DbrTypeBase, _LongStringChannelType
 from .._utils import apply_deadband_filter
 
+if typing.TYPE_CHECKING:
+    from .._circuit import ServerChannel, SubscriptionType
+    from .._data import ChannelData
+    from .._utils import ChannelFilter
+
+
 # ** Tuning this parameters will affect the servers' performance **
 # ** under high load. **
 # If the queue of subscriptions to has a new update ready within this timeout,
 # we consider ourselves under high load and trade accept some latency for some
 # efficiency.
-HIGH_LOAD_TIMEOUT = 0.01
+HIGH_LOAD_TIMEOUT = float(
+    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_TIMEOUT_SEC", 0.01)
+)
+HIGH_LOAD_EVENT_TIME_THRESHOLD = float(
+    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_EVENT_TIME_THRESHOLD_SEC", 0.1)
+)
+# Warn the user if packets are delayed by more than this amount: 30ms
+# Set to 0 to disable the warning entirely.
+HIGH_LOAD_WARN_LATENCY_SEC = float(
+    os.environ.get("CAPROTO_SERVER_HIGH_LOAD_WARN_LATENCY_SEC", 0.03)
+)
 # When a batch of subscription updates has this many bytes or more, send it.
-SUB_BATCH_THRESH = 2**16
+SUB_BATCH_THRESH = int(os.environ.get("CAPROTO_SERVER_SUB_BATCH_THRESH", 2 ** 16))
 # Tune this to change the max time between packets. If it's too high, the
 # client will experience long gaps when the server is under load. If it's too
 # low, the *overall* latency will be higher because the server will have to
 # waste time bundling many small packets.
-MAX_LATENCY = 1
+MAX_LATENCY = float(os.environ.get("CAPROTO_SERVER_MAX_LATENCY_SEC", 1.0))
 # If a Read[Notify]Request or EventAddRequest is received, wait for up to this
 # long for the currently-processing Write[Notify]Request to finish.
-WRITE_LOCK_TIMEOUT = 0.001
+WRITE_LOCK_TIMEOUT = float(
+    os.environ.get("CAPROTO_SERVER_WRITE_LOCK_TIMEOUT_SEC", 0.001)
+)
 
 
 class DisconnectedCircuit(Exception):
@@ -68,6 +90,14 @@ class Subscription(namedtuple('Subscription',
     db_entry : ChannelData
         The database entry
     '''
+    mask: SubscriptionType
+    channel_filter: ChannelFilter
+    circuit: VirtualCircuit
+    channel: ServerChannel
+    data_type: ChannelType
+    data_count: int
+    subscriptionid: int
+    db_entry: ChannelData
 
 
 class SubscriptionSpec(namedtuple('SubscriptionSpec',
@@ -92,6 +122,10 @@ class SubscriptionSpec(namedtuple('SubscriptionSpec',
         The channel filter specified, including timestamp, deadband,
         array and sync options.
     '''
+    db_entry: ChannelData
+    data_type_name: str
+    mask: SubscriptionType
+    channel_filter: ChannelFilter
 
 
 host_endian = ('>' if sys.byteorder == 'big' else '<')
@@ -112,9 +146,9 @@ class VirtualCircuit:
         # The structure of self.subscriptions is:
         # {SubscriptionSpec: deque([Subscription, Subscription, ...]), ...}
         self.subscriptions = defaultdict(deque)
-        self.unexpired_updates = defaultdict(
-            lambda: deque(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
+        self.unexpired_updates = {}
         self.subscriptions_to_resend = {}
+        self.time_events_toggled = time.monotonic()
         # This dict is passed to the loggers.
         self._tags = {'their_address': self.circuit.address,
                       'our_address': self.circuit.our_address,
@@ -386,13 +420,22 @@ class VirtualCircuit:
                 break
             try:
                 len_commands = len(commands)
-                if num_expired:
+
+                # If events are toggled by the client, subscriptions values get
+                # garbage- collected.  It's not a high load situation.  Let's
+                # warn only if we're relatively sure that it wasn't due to
+                # recent event toggling.
+                time_since_events_toggled = time.monotonic() - self.time_events_toggled
+                if num_expired and time_since_events_toggled > HIGH_LOAD_EVENT_TIME_THRESHOLD:
                     self.log.warning("High load. Dropped %d responses.", num_expired)
-                if len_commands > 1:
-                    self.log.info(
-                        "High load. Batched %d commands (%dB) with %.4fs latency.",
-                        len_commands, commands_bytes,
-                        now - deadline + latency_limit)
+
+                if len_commands > 1 and HIGH_LOAD_WARN_LATENCY_SEC > 0:
+                    latency = now - deadline + latency_limit
+                    if latency >= HIGH_LOAD_WARN_LATENCY_SEC:
+                        self.log.warning(
+                            "High load. Batched %d commands (%dB) with %.4fs latency.",
+                            len_commands, commands_bytes, latency
+                        )
 
                 # Ensure at the last possible moment that we don't send
                 # responses for Subscriptions that have been canceled at some
@@ -659,6 +702,7 @@ class VirtualCircuit:
             self.circuit.log.info("Client at %s:%d has turned events on.",
                                   *self.circuit.address)
 
+            self.time_events_toggled = time.monotonic()
             maybe_awaitable = self.events_on.set()
             # The curio backend makes this an awaitable thing.
             if maybe_awaitable is not None:
@@ -680,6 +724,7 @@ class VirtualCircuit:
         elif isinstance(command, ca.EventsOffRequest):
             self.circuit.log.info("Client at %s:%d has turned events off.",
                                   *self.circuit.address)
+            self.time_events_toggled = time.monotonic()
             # ...and tell the Context that any future updates from ChannelData
             # should not be added to this circuit's queue until further notice.
             self.events_on.clear()
@@ -1034,6 +1079,12 @@ class Context:
 
         # This is an OrderedBoundedSet, a set with a maxlen, containing only
         # commands for this particular subscription.
+
+        if sub.subscriptionid not in circuit.unexpired_updates:
+            circuit.unexpired_updates[sub.subscriptionid] = deque(
+                maxlen=sub.db_entry.max_subscription_backlog,
+            )
+
         circuit.unexpired_updates[sub.subscriptionid].append(command)
 
         def destroyed(_):

@@ -29,7 +29,7 @@ from .. import (AccessRights, AlarmSeverity, AlarmStatus,
                 CaprotoValueError, ChannelAlarm, ChannelByte, ChannelChar,
                 ChannelData, ChannelDouble, ChannelEnum, ChannelFloat,
                 ChannelInteger, ChannelShort, ChannelString, ChannelType,
-                __version__, get_server_address_list)
+                __version__, _constants, get_server_address_list)
 from .._backend import backend
 from .typing import (AinitHook, AsyncLibraryLayer, BoundGetter, BoundPutter,
                      BoundScan, BoundShutdown, BoundStartup, Getter, Putter,
@@ -249,6 +249,8 @@ class PvpropertyData(Generic[T_RecordFields], ChannelData):
             self.field_inst = None
             self.fields = {}
 
+        self._check_subscription_backlog_settings()
+
     def __getstate__(self):
         state = super().__getstate__()
         state["group"] = None
@@ -261,6 +263,49 @@ class PvpropertyData(Generic[T_RecordFields], ChannelData):
         kwargs["pvspec"] = self.pvspec
         kwargs["record"] = self.record_type
         return (args, kwargs)
+
+    def _check_subscription_backlog_settings(self) -> None:
+        warn_thresh = _constants.SUBSCRIPTION_BACKLOG_WARN_THRESHOLD_ELEMENTS
+        if warn_thresh <= 1:
+            # Warning disabled.
+            return
+        if not self.max_length or self.max_length <= 1:
+            # Never warn for scalars.
+            return
+        if (self.max_length * self.max_subscription_backlog) < warn_thresh:
+            # Not over the threshold, so don't warn.
+            return
+
+        logger = self.group.log if self.group is not None else module_logger
+        reduce = _constants.SUBSCRIPTION_BACKLOG_REDUCE_AT_WARN_LEVEL
+        if reduce:
+            self.max_subscription_backlog = max(
+                (
+                    # Use the warning threshold to squeeze in under the
+                    # warning,
+                    warn_thresh // self.max_length,
+                    # But at minimum, provide this many subscriptions in
+                    # the backlog.
+                    _constants.MIN_SUBSCRIPTION_BACKLOG,
+                )
+            )
+            details = (
+                f"Automatically reduced the subscription backlog based on "
+                f"settings: {self.max_subscription_backlog}"
+            )
+        else:
+            details = (
+                "Not reducing the subscription backlog as it has been disabled."
+            )
+
+        logger.warning(
+            "PV %r with up to %d elements has the potential to take up considerable "
+            "memory when subscribed to with the default backlog of %d.  %s",
+            self.pvname,
+            self.max_length,
+            _constants.MAX_SUBSCRIPTION_BACKLOG,
+            details,
+        )
 
     async def read(self, data_type):
         """
@@ -733,6 +778,7 @@ class PVSpec(namedtuple('PVSpec',
                 f"Failed to instantiate {cls.__name__!r} from PVSpec: {ex} "
                 f"(kwargs={kwargs})"
             ) from ex
+
         inst.__doc__ = self.doc
         return inst
 
