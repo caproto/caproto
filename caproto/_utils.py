@@ -1,9 +1,12 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+from __future__ import annotations
+
 import argparse
 import array
 import collections
+import copy
 import enum
 import functools
 import inspect
@@ -20,9 +23,15 @@ import typing
 import weakref
 from collections import namedtuple
 from contextlib import contextmanager
+from typing import Iterable
 from warnings import warn
 
+from ._dbr import SubscriptionType
 from ._version import get_versions
+
+if typing.TYPE_CHECKING:
+    from .server.common import Subscription
+
 
 __version__ = get_versions()['version']
 
@@ -851,6 +860,63 @@ def apply_arr_filter(arr_filter, values):
         else:
             stop += 1
     return values[start:stop:step]
+
+
+def apply_deadband_filter(
+    previous_value,
+    new_value,
+    sub: Subscription,
+    flags: int,
+    host_endian: str,
+):
+    """
+    Apply the Subscription-specified deadband filter.
+
+    Requires caller to track state between subscription updates.
+    If outside of the deadband range, this will return the value to be
+    tracked.
+    """
+    if hasattr(new_value, "endian"):
+        if new_value.endian != host_endian:
+            new_value = copy.copy(new_value)
+            new_value.byteswap()
+
+    if previous_value is None:
+        # First entry:
+        return new_value
+
+    old_iterable = isinstance(previous_value, Iterable)
+    new_iterable = isinstance(new_value, Iterable)
+    if (not old_iterable or (old_iterable and len(previous_value) == 1)) and (
+        not new_iterable or (new_iterable and len(new_value) == 1)
+    ):
+        if old_iterable:
+            (previous_value,) = previous_value
+        if new_iterable:
+            (new_value,) = new_value
+
+        # Cool that was fun. (git blame may say klauer but you must dig deeper
+        # to find the truth)
+        if sub.channel_filter.dbnd.m == "rel":
+            out_of_band = sub.channel_filter.dbnd.d < abs(
+                (previous_value - new_value) / previous_value
+            )
+        else:  # must be 'abs' -- was already validated
+            out_of_band = sub.channel_filter.dbnd.d < abs(previous_value - new_value)
+        # We have verified that that EPICS considers DBE_LOG
+        # etc. to be an absolute (not relative) threshold.
+        abs_diff = abs(previous_value - new_value)
+        if abs_diff > sub.db_entry.log_atol:
+            flags |= SubscriptionType.DBE_LOG
+            if abs_diff > sub.db_entry.value_atol:
+                flags |= SubscriptionType.DBE_VALUE
+
+        if not (out_of_band and (sub.mask & flags)):
+            return None
+
+        return new_value
+
+    return None
 
 
 def batch_requests(request_iter, max_length):
