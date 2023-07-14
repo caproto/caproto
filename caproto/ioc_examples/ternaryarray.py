@@ -29,8 +29,8 @@ from enum import Enum
 from functools import partial, reduce
 from collections import OrderedDict
 from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
-from ophyd import Device, DeviceStatus, EpicsSignal, EpicsSignalRO, FormattedComponent
-
+from ophyd import Device, DeviceStatus, Component, FormattedComponent, EpicsSignal, EpicsSignalRO, FormattedComponent
+from ophyd.device import DynamicDeviceComponent
 
 class StateEnum(Enum):
     In = True
@@ -149,7 +149,7 @@ class TernaryDevice(Device):
 
     set_cmd = FormattedComponent(EpicsSignal, "{self._set_name}")
     reset_cmd = FormattedComponent(EpicsSignal, "{self._reset_name}")
-    state_rbv = FormattedComponent(EpicsSignalRO, "{self._state_name}", string=True)
+    state_rbv = FormattedComponent(EpicsSignalRO, "{self._state_name}", kind='hinted')
 
     def __init__(
         self, *args, set_name, reset_name, state_name, state_enum, **kwargs
@@ -203,7 +203,7 @@ class TernaryDevice(Device):
         self.set(False)
 
     def get(self):
-        return self._state
+        return self.state_rbv.get()
 
 
 class ExampleTernary(TernaryDevice):
@@ -215,7 +215,6 @@ class ExampleTernary(TernaryDevice):
     def __init__(self, index, *args, **kwargs):
         super().__init__(
             *args,
-            name=f"Filter{index}",
             set_name=f"TernaryArray:device{index}_set",
             reset_name=f"TernaryArray:device{index}_reset",
             state_name=f"TernaryArray:device{index}_rbv",
@@ -224,7 +223,7 @@ class ExampleTernary(TernaryDevice):
         )
 
 
-ternary1 = ExampleTernary(1)
+ternary1 = ExampleTernary(1, name='test')
 
 
 class CmsFilter(TernaryDevice):
@@ -236,7 +235,6 @@ class CmsFilter(TernaryDevice):
     def __init__(self, index, *args, **kwargs):
         super().__init__(
             *args,
-            name=f"Filter{index}",
             set_name=f"XF:11BMB-OP{{Fltr:{index}}}Cmd:Opn-Cmd",
             reset_name=f"XF:11BMB-OP{{Fltr:{index}}}Cmd:Cls-Cmd",
             state_name=f"XF:11BMB-OP{{Fltr:{index}}}Pos-Sts",
@@ -245,7 +243,7 @@ class CmsFilter(TernaryDevice):
         )
 
 
-def ArrayDevice(devices, *args, **kwargs):
+def ArrayDevice(components, *args, **kwargs):
     """
     A function, that behaves like a class init, that dynamically creates an
     ArrayDevice class. This is needed to set class attributes before the init.
@@ -265,6 +263,68 @@ def ArrayDevice(devices, *args, **kwargs):
             The array of ophyd devices.
         """
         def set(self, values):
+            if len(values) != len(self.component_names):
+                raise ValueError(
+                    f"The number of values ({len(values)}) must match "
+                    f"the number of devices ({len(self.devices)})"
+                )
+
+            # If the device already has the requested state, return a finished status.
+            diff = [getattr(self, self.devices[i]).get() != value for i, value in enumerate(values)]
+            if not any(diff):
+                return DeviceStatus(self)._finished()
+
+            # Set the value of each device and return a union of the statuses.
+            statuses = [getattr(self, self.devices[i]).set(value) for i, value in enumerate(values)]
+            st = reduce(lambda a, b: a & b, statuses)
+            return st
+
+        def get(self):
+            return [getattr(self, device).get() for device in self.devices]
+
+    #types = {component.cls for component in components}
+    #if len(types) != 1:
+    #    raise TypeError("All components must have the same type")
+
+    clsdict = OrderedDict(
+        {
+            **{'__doc__': "ArrayDevice",
+               '_default_read_attrs': None,
+               '_default_configuration_attrs': None},
+            **components,
+            'devices': list(components.keys())
+        }
+    )
+
+    _ArrayDevice = type('ArrayDevice', (_ArrayDeviceBase,), clsdict)
+    return _ArrayDevice(*args, **kwargs)
+
+
+
+#array_device = ArrayDevice([Component(ExampleTernary, i) for i in range(10)], name='array_device')
+#components = {f'c{i}': Component(ExampleTernary, i) for i in range(1,11)}
+#array_device = ArrayDevice(components, name='array_device')
+
+components = {f'c{i}': FormattedComponent(ExampleTernary, f"{i}") for i in range(3)}
+array_device = ArrayDevice(components, name="array_device")
+
+def array_device_builder(components):
+    class ArrayDeviceBase(Device):
+        """
+        An ophyd.Device that is an array of devices.
+
+        The set method takes a list of values.
+        the get method returns a list of values.
+        Parameters
+        ----------
+        devices: iterable
+            The array of ophyd devices.
+        """
+        components =  DynamicDeviceComponent(components)
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args,**kwargs)
+
+        def set(self, values):
             if len(values) != len(self.devices):
                 raise ValueError(
                     f"The number of values ({len(values)}) must match "
@@ -280,22 +340,10 @@ def ArrayDevice(devices, *args, **kwargs):
             statuses = [self.devices[i].set(value) for i, value in enumerate(values)]
             st = reduce(lambda a, b: a & b, statuses)
             return st
+    return ArrayDeviceBase
 
-        def reset(self):
-            self.set([0 for i in range(len(self.devices))])
 
-        def get(self):
-            return [device.get() for device in self.devices]
-
-    types = {type(device) for device in devices}
-    if len(types) != 1:
-        raise TypeError("All devices must have the same type")
-
-    _ArrayDevice = type('ArrayDevice', (_ArrayDeviceBase,), {'devices': devices})
-    return _ArrayDevice(*args, **kwargs)
-
-array_device = ArrayDevice([ExampleTernary(i) for i in range(10)], name='array_device')
-
+# components = {f'c{i}': (ExampleTernary, i, {}) for i in range(1,11)}
 
 def start_test_ioc():
     ioc = TernaryArrayIOC(prefix='TernaryArray:')
@@ -332,11 +380,11 @@ def test_arraydevice():
     assert arraydevice.get() == values
 
 
-if __name__ == "__main__":
-    ioc_options, run_options = ioc_arg_parser(
-        default_prefix="TernaryArray:", desc="TernaryArray IOC"
-    )
-    ioc = TernaryArrayIOC(**ioc_options)
-    print("Prefix =", "TernaryArray:")
-    print("PVs:", list(ioc.pvdb))
-    run(ioc.pvdb, **run_options)
+#if __name__ == "__main__":
+#    ioc_options, run_options = ioc_arg_parser(
+#        default_prefix="TernaryArray:", desc="TernaryArray IOC"
+#    )
+#    ioc = TernaryArrayIOC(**ioc_options)
+#    print("Prefix =", "TernaryArray:")
+#    print("PVs:", list(ioc.pvdb))
+#    run(ioc.pvdb, **run_options)
