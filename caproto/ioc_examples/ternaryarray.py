@@ -137,6 +137,7 @@ class TernaryArrayIOC(PVGroup):
         await self.pvdb[f"{self.prefix}device{index}_rbv"].write(
             StateEnum(self._devices[index].state).name
         )
+        print(f"{self.prefix}device{index}_rbv", StateEnum(self._devices[index].state).name)
         # This is the normal way to do this, but it doesn't work correctly for this example.
         # await getattr(self, f'device{index}_rbv').write(StateEnum(self._devices[index].state).name)
 
@@ -299,16 +300,14 @@ def ArrayDevice(components, *args, **kwargs):
     _ArrayDevice = type('ArrayDevice', (_ArrayDeviceBase,), clsdict)
     return _ArrayDevice(*args, **kwargs)
 
-
-
-#array_device = ArrayDevice([Component(ExampleTernary, i) for i in range(10)], name='array_device')
-#components = {f'c{i}': Component(ExampleTernary, i) for i in range(1,11)}
-#array_device = ArrayDevice(components, name='array_device')
-
 components = {f'c{i}': FormattedComponent(ExampleTernary, f"{i}") for i in range(3)}
 array_device = ArrayDevice(components, name="array_device")
 
+
 def array_device_builder(components):
+    """
+    This is an alternative way to create an array device.
+    """
     class ArrayDeviceBase(Device):
         """
         An ophyd.Device that is an array of devices.
@@ -371,13 +370,16 @@ def test_ioc(f):
 
 @test_ioc
 def test_arraydevice():
-    arraydevice = ArrayDevice([ExampleTernary(i) for i in range(10)],
-                              name='arraydevice')
-    values = [1,1,1,0,0,0,1,1,1,0]
-    arraydevice.set(values)
+    """
+    Not passing yet, some reason the IOC is returning ints not strings on the rbv.
+    """
+    components = {f'c{i}': FormattedComponent(ExampleTernary, f"{i}") for i in range(3)}
+    array_device = ArrayDevice(components, name="array_device")
+    values = [1,0,1]
+    array_device.set(values)
     time.sleep(1)
-    print(arraydevice.get())
-    assert arraydevice.get() == values
+    print(array_device.get())
+    assert array_device.get() == values
 
 
 #if __name__ == "__main__":
