@@ -180,19 +180,21 @@ def pvfunction_to_device_function(name, pvf, *, indent='    '):
     args = ', '.join(format_arg(spec) for spec in pvf.pvspec
                      if spec.attr not in skip_attrs)
     yield f"{indent}def call(self, {args}):"
+    indent_ = indent * 2
+    indent__ = indent * 3
     if pvf.__doc__:
-        yield f"{indent*2}'{pvf.__doc__}'"
+        yield f"{indent_}'{pvf.__doc__}'"
     for pvspec in pvf.pvspec:
         if pvspec.attr not in skip_attrs:
-            yield (f"{indent*2}self.{pvspec.attr}.put({pvspec.attr}, "
+            yield (f"{indent_}self.{pvspec.attr}.put({pvspec.attr}, "
                    "wait=True)")
 
-    yield f"{indent*2}self.process.put(1, wait=True)"
-    yield f"{indent*2}status = self.status.get(use_monitor=False)"
-    yield f"{indent*2}retval = self.retval.get(use_monitor=False)"
-    yield f"{indent*2}if status != 'Success':"
-    yield f"{indent*3}raise RuntimeError(f'RPC function failed: {{status}}')"
-    yield f"{indent*2}return retval"
+    yield f"{indent_}self.process.put(1, wait=True)"
+    yield f"{indent_}status = self.status.get(use_monitor=False)"
+    yield f"{indent_}retval = self.retval.get(use_monitor=False)"
+    yield f"{indent_}if status != 'Success':"
+    yield f"{indent__}raise RuntimeError(f'RPC function failed: {{status}}')"
+    yield f"{indent_}return retval"
 
 
 def group_to_device(group):
