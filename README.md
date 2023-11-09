@@ -82,8 +82,8 @@ caproto-put simple:A 42
 ```
 
 This sets the value to 42. See the
-[documentation](https://caproto.github.io/caproto/) documentation for more
-details on these tools.
+[documentation](https://caproto.github.io/caproto/) for more details on these
+tools.
 
 ## When to use caproto and when not to use caproto
 
