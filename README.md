@@ -3,7 +3,7 @@
 caproto: a bring-your-own-IO implementation of the EPICS Channel Access
 protocol in pure Python
 
-![logo](https://raw.githubusercontent.com/caproto/caproto/assets/caproto.svg)
+<img src="https://raw.githubusercontent.com/caproto/caproto/assets/caproto.svg" width="50%">
 
 [![Build Status](https://github.com/caproto/caproto/actions/workflows/testing.yml/badge.svg)](https://github.com/caproto/caproto/actions/workflows/testing.yml)
 [![codecov](https://codecov.io/gh/caproto/caproto/branch/master/graph/badge.svg)](https://codecov.io/gh/caproto/caproto)
