@@ -10,7 +10,6 @@ Responses.
 """
 import logging
 import os
-import sys
 from collections import deque
 from collections.abc import Iterable
 
@@ -41,18 +40,15 @@ __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
 STRING_ENCODING = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
-if sys.version_info < (3, 12):
-    _safe_len = len
-else:
-    def _safe_len(byteslike) -> int:
-        """
-        Python 3.12+ compatibility:
+def _safe_len(byteslike) -> int:
+    """
+    Calculate the number of bytes in a bytes-like buffer.
 
-        Ref: https://bugs.python.org/issue39610
-        """
-        if isinstance(byteslike, memoryview) and byteslike.ndim == 0:
-            return 1
-        return len(byteslike)
+    Ref: https://bugs.python.org/issue39610
+    """
+    if isinstance(byteslike, memoryview):
+        return byteslike.nbytes
+    return len(byteslike)
 
 
 class VirtualCircuit:
