@@ -24,6 +24,11 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install .[test]
 
+    - name: Fix temporary test suite issues
+      run: |
+        python -m pip uninstall --yes curio
+        python -m pip install git+https://github.com/dabeaz/curio@8667999a81f9daa147d2032b6985fc367679f095
+
     - name: Test with pytest
       env:
         CAPROTO_SKIP_MOTORSIM_TESTS: 1
