@@ -10,6 +10,7 @@ Responses.
 """
 import logging
 import os
+import sys
 from collections import deque
 from collections.abc import Iterable
 
@@ -38,6 +39,20 @@ __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
            'extract_address')
 
 STRING_ENCODING = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
+
+
+if sys.version_info < (3, 12):
+    _safe_len = len
+else:
+    def _safe_len(byteslike) -> int:
+        """
+        Python 3.12+ compatibility:
+
+        Ref: https://bugs.python.org/issue39610
+        """
+        if isinstance(byteslike, memoryview) and byteslike.ndim == 0:
+            return 1
+        return len(byteslike)
 
 
 class VirtualCircuit:
@@ -185,7 +200,7 @@ class VirtualCircuit:
         -------
         ``(commands, num_bytes_needed)``
         """
-        total_received = sum(len(byteslike) for byteslike in buffers)
+        total_received = sum(_safe_len(byteslike) for byteslike in buffers)
         commands = deque()
         if total_received == 0:
             self.log.debug('Circuit disconnected')
