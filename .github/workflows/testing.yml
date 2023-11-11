@@ -9,7 +9,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v3
@@ -23,6 +23,11 @@ jobs:
         git fetch --tags
         python -m pip install --upgrade pip
         python -m pip install .[test]
+
+    - name: Fix temporary test suite issues
+      run: |
+        python -m pip uninstall --yes curio
+        python -m pip install git+https://github.com/dabeaz/curio@8667999a81f9daa147d2032b6985fc367679f095
 
     - name: Test with pytest
       env:

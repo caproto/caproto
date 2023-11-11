@@ -40,6 +40,17 @@ __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
 STRING_ENCODING = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
+def _safe_len(byteslike) -> int:
+    """
+    Calculate the number of bytes in a bytes-like buffer.
+
+    Ref: https://bugs.python.org/issue39610
+    """
+    if isinstance(byteslike, memoryview):
+        return byteslike.nbytes
+    return len(byteslike)
+
+
 class VirtualCircuit:
     """
     An object encapulating the state of one CA client--server connection.
@@ -185,7 +196,7 @@ class VirtualCircuit:
         -------
         ``(commands, num_bytes_needed)``
         """
-        total_received = sum(len(byteslike) for byteslike in buffers)
+        total_received = sum(_safe_len(byteslike) for byteslike in buffers)
         commands = deque()
         if total_received == 0:
             self.log.debug('Circuit disconnected')
