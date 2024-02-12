@@ -77,6 +77,7 @@ __all__ = [
     "PvpropertyStringRO",
     "ioc_arg_parser",
     "template_arg_parser",
+    "extend_arg_parser",
     "run",
 ]
 
@@ -2102,35 +2103,39 @@ class _ReadWriteSubGroup(PVGroup, Generic[T_Data, T_RecordFields]):
     setpoint = pvproperty[T_Data, T_RecordFields](doc="The read-write setpoint value")
 
 
-def template_arg_parser(
+def extend_arg_parser(
     *,
-    desc: str,
+    parser: argparse.ArgumentParser,
     default_prefix: str,
     argv: Optional[List[str]] = None,
     macros: Optional[Dict[str, str]] = None,
-    supported_async_libs: Optional[List[str]] = None
-) -> Tuple[argparse.ArgumentParser, Callable]:
+    supported_async_libs: Optional[List[str]] = None,
+) -> Callable:
     """
-    Construct a template arg parser for starting up an IOC
+    Extend an existing arg parser with standard caproto IOC flags.
 
     Parameters
     ----------
-    description : string
-        Human-friendly description of what that IOC does
-    default_prefix : string
+    parser : argparse.ArgumentParser
+        The parser to extend.
+
+        .. warning :
+
+          The parser will be modified in-place to add additional arguments.
+
+    default_prefix : str
     args : list, optional
         Defaults to sys.argv
     macros : dict, optional
         Maps macro names to default value (string) or None (indicating that
         this macro parameter is required).
     supported_async_libs : list, optional
-        "White list" of supported server implementations. The first one will
+        Allowed list of supported server implementations. The first one will
         be the default. If None specified, the parser will accept all of the
         (hard-coded) choices.
 
     Returns
     -------
-    parser : argparse.ArgumentParser
     split_args : callable[argparse.Namespace, Tuple[dict, dict]]
         A helper function to extract and split the 'standard' CL arguments.
         This function sets the logging level and returns the kwargs for
@@ -2140,10 +2145,6 @@ def template_arg_parser(
         argv = sys.argv
     if macros is None:
         macros = {}
-    parser = argparse.ArgumentParser(
-        description=desc,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f'caproto version {__version__}')
     parser.add_argument('--prefix', type=str, default=default_prefix)
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-q', '--quiet', action='store_true',
@@ -2210,7 +2211,56 @@ def template_arg_parser(
                  'log_pv_names': args.list_pvs,
                  'interfaces': args.interfaces})
 
-    return parser, split_args
+    return split_args
+
+
+def template_arg_parser(
+    *,
+    desc: str,
+    default_prefix: str,
+    argv: Optional[List[str]] = None,
+    macros: Optional[Dict[str, str]] = None,
+    supported_async_libs: Optional[List[str]] = None,
+) -> Tuple[argparse.ArgumentParser, Callable]:
+    """
+    Construct a template arg parser for starting up an IOC
+
+    Parameters
+    ----------
+    description : str
+        Human-friendly description of what the IOC does
+    default_prefix : str
+    args : list, optional
+        Defaults to sys.argv
+    macros : dict, optional
+        Maps macro names to default value (string) or None (indicating that
+        this macro parameter is required).
+    supported_async_libs : list, optional
+        Allowed list of supported server implementations. The first one will
+        be the default. If None specified, the parser will accept all of the
+        (hard-coded) choices.
+
+    Returns
+    -------
+    parser : argparse.ArgumentParser
+    split_args : callable[argparse.Namespace, Tuple[dict, dict]]
+        A helper function to extract and split the 'standard' CL arguments.
+        This function sets the logging level and returns the kwargs for
+        constructing the IOC and for the launching the server.
+    """
+
+    parser = argparse.ArgumentParser(
+        description=desc,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"caproto version {__version__}",
+    )
+    return parser, extend_arg_parser(
+        parser=parser,
+        default_prefix=default_prefix,
+        argv=argv,
+        macros=macros,
+        supported_async_libs=supported_async_libs,
+    )
 
 
 def ioc_arg_parser(
@@ -2226,16 +2276,16 @@ def ioc_arg_parser(
 
     Parameters
     ----------
-    description : string
+    description : str
         Human-friendly description of what that IOC does
-    default_prefix : string
+    default_prefix : str
     args : list, optional
         Defaults to sys.argv
     macros : dict, optional
         Maps macro names to default value (string) or None (indicating that
         this macro parameter is required).
     supported_async_libs : list, optional
-        "White list" of supported server implementations. The first one will
+        Allowed list of supported server implementations. The first one will
         be the default. If None specified, the parser will accept all of the
         (hard-coded) choices.
 
