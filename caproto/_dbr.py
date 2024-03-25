@@ -1164,6 +1164,10 @@ def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
 def timestamp_to_epics(ts):
     '''Python timestamp from EPICS TimeStamp structure'''
     if isinstance(ts, numbers.Real):
-        ts = datetime.datetime.utcfromtimestamp(ts)
+        try:
+            ts = datetime.datetime.fromtimestamp(ts, datetime.UTC)
+        except AttributeError:
+            ts = datetime.datetime.utcfromtimestamp(ts)
+
     dt = ts - EPICS_EPOCH
     return int(dt.total_seconds()), int(dt.microseconds * 1e3)
