@@ -57,6 +57,7 @@ def test_put_empty_list(context, ioc):
 
     pv.put([], wait=True)
     ret = pv.get(use_monitor=False)
+    assert ret.dtype.isnative
     assert list(ret) == []
 
 
@@ -85,3 +86,14 @@ assert len(threading.enumerate()) > 1
         subprocess.run([sys.executable, "-c", c], check=True, timeout=5)
     except subprocess.CalledProcessError as err:
         pytest.fail("Subprocess failed to test intended behavior\n" + str(err.stderr))
+
+
+def test_native_endianess(context, ioc):
+    pv = get_pv(ioc.pvs['waveform'], context=context)
+    pv.wait_for_connection(timeout=10)
+    assert pv.connected
+
+    pv.put([1, 2, 3], wait=True)
+    ret = pv.get()
+    assert list(ret) == [1, 2, 3]
+    assert ret.dtype.isnative
