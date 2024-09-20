@@ -98,6 +98,7 @@ from contextlib import contextmanager
 from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo,
                                               caget_many, caput_many,
                                               AccessRightsException)
+from unittest import mock
 
 from .conftest import default_setup_module, default_teardown_module
 from .test_threading_client import context, shared_broadcaster
@@ -1054,3 +1055,25 @@ def test_get_with_metadata(pvnames):
         ns = pv.get_with_metadata(use_monitor=True, as_namespace=True)
         assert hasattr(ns, 'timestamp')
         assert hasattr(ns, 'lower_ctrl_limit')
+
+
+def test_auto_monitor_subscription_no_user_callback(pvnames):
+    with mock.patch(
+        "caproto.threading.pyepics_compat.PV.run_callbacks"
+    ) as mocked_run_callbacks:
+        pv = PV(pvnames.double_pv, form="native")
+        # auto-monitor is on by default in this case, so "run_callbacks"
+        # will get called on the first initial update
+        t0 = time.perf_counter()
+        while time.perf_counter() - t0 < 10:
+            if mocked_run_callbacks.call_count == 1:
+                break
+            time.sleep(1)
+
+    # make an additional read -> should not trigger "read_response"
+    # (use of last received update)
+    with mock.patch(
+        "caproto.threading.pyepics_compat._read_response_to_pyepics"
+    ) as mocked_read_response:
+        pv.get()
+    mocked_read_response.assert_not_called()
