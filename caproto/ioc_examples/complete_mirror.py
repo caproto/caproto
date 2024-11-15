@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 
+from functools import cached_property
 from caproto.asyncio.client import Context
 from caproto.server import PVGroup, pvproperty, run, template_arg_parser
 
@@ -12,6 +13,7 @@ class PreloadedContext(Context):
         for name, (addr, version) in cache.items():
             self.broadcaster.results.mark_name_found(name, addr)
             self.broadcaster.server_protocol_versions[addr] = version
+
 
 
 class Mirror(PVGroup):
@@ -29,7 +31,6 @@ class Mirror(PVGroup):
 
     def __init__(self, *args, config, **kwargs):
         self.config = config
-        self.client_context = None
         self.pv = None
         self.subscription = None
         super().__init__(*args, **kwargs)
@@ -42,12 +43,14 @@ class Mirror(PVGroup):
             timestamp=response.metadata.timestamp,
         )
 
+    @cached_property
+    def client_context(self):
+        return PreloadedContext(cache=self.config)
+
     @value.startup
     async def value(self, instance, async_lib):
         # Note that the asyncio context must be created here so that it knows
         # which asyncio loop to use:
-
-        self.client_context = PreloadedContext(cache=self.config)
 
         self.pv, = await self.client_context.get_pvs(next(iter(self.config)))
 
