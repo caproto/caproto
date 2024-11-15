@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import json
+
 from caproto.asyncio.client import Context
 from caproto.server import PVGroup, pvproperty, run, template_arg_parser
 
@@ -25,8 +27,8 @@ class Mirror(PVGroup):
     # TODO This assumes the type of the value is float.
     value = pvproperty(value=0, dtype=float, read_only=True)
 
-    def __init__(self, *args, target, **kwargs):
-        self.target = target  # PV to mirror
+    def __init__(self, *args, config, **kwargs):
+        self.config = config
         self.client_context = None
         self.pv = None
         self.subscription = None
@@ -45,9 +47,9 @@ class Mirror(PVGroup):
         # Note that the asyncio context must be created here so that it knows
         # which asyncio loop to use:
 
-        self.client_context = PreloadedContext(cache={'random_walk:x': (('127.0.0.1',5064), 13)})
+        self.client_context = PreloadedContext(cache=self.config)
 
-        self.pv, = await self.client_context.get_pvs(self.target)
+        self.pv, = await self.client_context.get_pvs(next(iter(self.config)))
 
         # Subscribe to the target PV and register self._callback.
         self.subscription = self.pv.subscribe(data_type='time')
@@ -60,10 +62,11 @@ if __name__ == '__main__':
         desc='Mirror the value of another floating-point PV.',
         supported_async_libs=('asyncio',)
     )
-    parser.add_argument('--target',
-                        help='The PV to mirror', required=True, type=str)
+    parser.add_argument('--config',
+                        help='JSON mapping of PVs to mirror and server information', required=True, type=str)
     # TODO use sync client to connect once and pull the types
     args = parser.parse_args()
     ioc_options, run_options = split_args(args)
-    ioc = Mirror(target=args.target, **ioc_options)
+    config = {k: (tuple(v[0]), v[1]) for k, v in json.loads(args.config).items()}
+    ioc = Mirror(config=config, **ioc_options)
     run(ioc.pvdb, **run_options)
