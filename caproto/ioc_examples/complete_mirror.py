@@ -3,6 +3,15 @@ from caproto.asyncio.client import Context
 from caproto.server import PVGroup, pvproperty, run, template_arg_parser
 
 
+class PreloadedContext(Context):
+    def __init__(self, *args, cache=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        cache = cache or {}
+        for name, (addr, version) in cache.items():
+            self.broadcaster.results.mark_name_found(name, addr)
+            self.broadcaster.server_protocol_versions[addr] = version
+
+
 class Mirror(PVGroup):
     """
     Subscribe to a PV and serve its value.
@@ -36,7 +45,7 @@ class Mirror(PVGroup):
         # Note that the asyncio context must be created here so that it knows
         # which asyncio loop to use:
 
-        self.client_context = Context()
+        self.client_context = PreloadedContext(cache={'random_walk:x': (('127.0.0.1',5064), 13)})
 
         self.pv, = await self.client_context.get_pvs(self.target)
 
