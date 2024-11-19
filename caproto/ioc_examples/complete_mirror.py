@@ -158,14 +158,29 @@ if __name__ == "__main__":
         supported_async_libs=("asyncio",),
     )
     parser.add_argument(
-        "--config",
-        help="JSON mapping of PVs to mirror and server information",
+        "--host",
+        help="ip address of IOC to be mirrored",
         required=True,
         type=str,
     )
-    # TODO use sync client to connect once and pull the types
+    parser.add_argument(
+        "--port",
+        help="port number of IOC to be mirrored",
+        required=True,
+        type=int,
+    )
+    parser.add_argument(
+        "--ca-version",
+        help="version of the CA protocol the mirrored IOC speaks",
+        required=False,
+        type=int,
+        default=13,
+    )
+    parser.add_argument("pvs", help="PVs to be mirrored", type=str, nargs="*")
+
     args = parser.parse_args()
     ioc_options, run_options = split_args(args)
-    config = {k: (tuple(v[0]), v[1]) for k, v in json.loads(args.config).items()}
+
+    config = {k: ((args.host, args.port), args.ca_version) for k in args.pvs}
     ioc = make_mirror(config)(**ioc_options)
     run(ioc.pvdb, **run_options)
