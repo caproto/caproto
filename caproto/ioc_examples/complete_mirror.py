@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import json
 import contextvars
 from functools import cached_property, partial
 
