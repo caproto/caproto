@@ -74,7 +74,6 @@ def make_mirror(config, read_only=False):
             }
         else:
             extra = {}
-        print(extra)
 
         value = pvproperty(
             value=resp.data,
@@ -86,9 +85,9 @@ def make_mirror(config, read_only=False):
 
         async def _callback(inst, sub, response):
             # Update our own value based on the monitored one:
-            print(sub.pv)
             try:
                 internal_process.set(True)
+
                 await inst.write(
                     response.data,
                     # We can even make the timestamp the same:
@@ -114,11 +113,16 @@ def make_mirror(config, read_only=False):
 
         @value.putter
         async def value(self, instance, value):
-            if not internal_process.get():
+            if internal_process.get():
+                return value
+            else:
                 pv = self._pvs[pv_str]
-                print(type(instance), value)
-                await pv.write(value)
-            return value
+                if chan.native_data_type in ca.enum_types:
+                    value = instance.get_raw_value(value)
+
+                await pv.write(value, timeout=500)
+                # trust the monitor took care of it
+                raise ca.SkipWrite()
 
         return value
 
