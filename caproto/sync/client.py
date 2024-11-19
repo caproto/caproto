@@ -152,8 +152,12 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 
 
 def make_channel(pv_name, udp_sock, priority, timeout):
-    log = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': pv_name})
     address = search(pv_name, udp_sock, timeout)
+    return make_channel_from_address(pv_name, address, priority, timeout)
+
+def make_channel_from_address(pv_name, address, priority, timeout):
+    log = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': pv_name})
+
     try:
         circuit = global_circuits[(address, priority)]
     except KeyError:
