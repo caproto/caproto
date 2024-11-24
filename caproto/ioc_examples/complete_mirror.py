@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import contextvars
 from functools import cached_property, partial
-
+from pathlib import Path
 
 from caproto.asyncio.client import Context
 from caproto.server import PVGroup, pvproperty, run, template_arg_parser
@@ -159,6 +159,13 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
+        "--pvlist",
+        help="File to read to get PV list",
+        required=False,
+        type=Path,
+        default=None,
+    )
+    parser.add_argument(
         "--port",
         help="port number of IOC to be mirrored",
         required=True,
@@ -174,8 +181,16 @@ if __name__ == "__main__":
     parser.add_argument("pvs", help="PVs to be mirrored", type=str, nargs="*")
 
     args = parser.parse_args()
+    if args.pvlist is not None:
+        with open(args.pvlist) as fin:
+            pvs_from_file = [
+                pv for pv in [line.strip() for line in fin.readlines()] if pv
+            ]
+
     ioc_options, run_options = split_args(args)
 
-    config = {k: ((args.host, args.port), args.ca_version) for k in args.pvs}
+    config = {
+        k: ((args.host, args.port), args.ca_version) for k in args.pvs + pvs_from_file
+    }
     ioc = make_mirror(config)(**ioc_options)
     run(ioc.pvdb, **run_options)
