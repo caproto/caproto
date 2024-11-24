@@ -47,14 +47,10 @@ class MirrorFrame(PVGroup):
         return PreloadedContext(cache=self.config)
 
 
-def make_mirror(config, read_only=False):
-    chans = []
-
-    def make_pvproperty(pv_str, addr_ver):
-        addr, ver = addr_ver
-        chan = csc.make_channel_from_address(pv_str, addr, 0, 5)
-        chans.append(chan)
-
+def make_pvproperty(pv_str, addr_ver, force_read_only):
+    addr, ver = addr_ver
+    chan = csc.make_channel_from_address(pv_str, addr, 0, 5)
+    try:
         # TODO make this public
         resp = csc._read(
             chan,
@@ -78,7 +74,7 @@ def make_mirror(config, read_only=False):
             value=resp.data,
             dtype=chan.native_data_type,
             max_length=chan.native_data_count,
-            read_only=read_only or (AccessRights.WRITE not in chan.access_rights),
+            read_only=force_read_only or (AccessRights.WRITE not in chan.access_rights),
             **extra,
         )
 
@@ -122,32 +118,32 @@ def make_mirror(config, read_only=False):
                 await pv.write(value, timeout=500)
                 # trust the monitor took care of it
                 raise ca.SkipWrite()
+    finally:
+        if chan.states[ca.CLIENT] is ca.CONNECTED:
+            csc.send(chan.circuit, chan.clear(), chan.name)
 
-        return value
+    return value
 
+
+def make_mirror(config, force_read_only=False):
     try:
         return type(
             "Mirror",
             (MirrorFrame,),
             {
                 **{
-                    pv_str: make_pvproperty(pv_str, addr_ver)
+                    pv_str: make_pvproperty(pv_str, addr_ver, force_read_only)
                     for pv_str, addr_ver in config.items()
                 },
                 "config": config,
             },
         )
     finally:
-        try:
-            for chan in chans:
-                if chan.states[ca.CLIENT] is ca.CONNECTED:
-                    csc.send(chan.circuit, chan.clear(), chan.name)
-        finally:
-            for socket in csc.sockets.values():
-                socket.close()
+        for socket in csc.sockets.values():
+            socket.close()
 
-            csc.sockets.clear()
-            csc.global_circuits.clear()
+        csc.sockets.clear()
+        csc.global_circuits.clear()
 
 
 if __name__ == "__main__":
