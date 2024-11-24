@@ -7,7 +7,6 @@ from pathlib import Path
 from caproto.asyncio.client import Context
 from caproto.server import PVGroup, pvproperty, run, template_arg_parser
 from caproto import AccessRights
-from caproto.server.records.base import RecordFieldGroup
 
 import caproto as ca
 import caproto.sync.client as csc
