@@ -223,7 +223,7 @@ if __name__ == "__main__":
         required=True,
         type=Path,
         default=None,
-    )   
+    ) 
     parser.add_argument(
         "--port",
         help="port number of IOC to be mirrored",
