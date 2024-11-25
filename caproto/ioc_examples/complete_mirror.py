@@ -220,10 +220,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--base-prefix",
         help="Prefix for original PVs",
-        required=True,
-        type=Path,
-        default=None,
-    ) 
+        required=False,
+        type=str,
+        default='',
+    )
     parser.add_argument(
         "--port",
         help="port number of IOC to be mirrored",
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     if args.pvlist is not None:
         with open(args.pvlist) as fin:
             pvs_from_file = [
-                str(args.base_prefix) + pv
+                f'{args.base_prefix}.{pv}'
                 for pv in [line.strip() for line in fin.readlines()]
                 if pv and not pv.startswith("#")
             ]
