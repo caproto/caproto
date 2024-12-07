@@ -7,7 +7,6 @@ import getpass
 import socket
 import threading
 import time
-import typing
 
 import pytest
 
@@ -21,6 +20,7 @@ from caproto.threading.client import (Batch, Context, ContextDisconnectedError,
 
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
+from .conftest import wait_for
 
 THREAD_TIMEOUT_SCALE = 2
 
@@ -380,16 +380,6 @@ def test_subscription_objects_are_reused(ioc, context):
     time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
     actual_cached_subs = set(pv.circuit_manager.subscriptions.values())
     assert actual_cached_subs == set([sub, sub_different])
-
-
-def wait_for(func: typing.Callable[[], bool], timeout: float) -> None:
-    t0 = time.monotonic()
-    while time.monotonic() - t0 < timeout:
-        if func():
-            return
-        time.sleep(max((timeout / 10.), 0.1))
-
-    raise TimeoutError(f"Condition {func} not successful within {timeout}")
 
 
 def test_unsubscribe_all(ioc, context):

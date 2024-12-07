@@ -1,9 +1,12 @@
+from functools import partial
+
 import pytest
 
 from caproto import AlarmSeverity, AlarmStatus, ChannelType
 from caproto.sync.client import read, write
 from caproto.threading.pyepics_compat import get_pv
 
+from .conftest import wait_for
 from .test_threading_client import context as _context
 from .test_threading_client import shared_broadcaster as _sb
 
@@ -72,10 +75,22 @@ def test_alarms(request, prefix, sevr_target, sevr_value, context, records_ioc):
          AlarmStatus.HIHI, get_severity('HHSV')),
 
     )
+
+    def check_status_severity(a_status: AlarmStatus, a_sevr: AlarmSeverity):
+        ctrl_vars = PV.get_ctrlvars()
+        return ctrl_vars['status'] == a_status and ctrl_vars['severity'] == a_sevr
+
     for minv, maxv, a_status, a_sevr in checks:
         ctrl_vars = PV.get_ctrlvars()
         v = (ctrl_vars[minv] + ctrl_vars[maxv]) / 2
         PV.put(v, wait=True)
-        ctrl_vars = PV.get_ctrlvars()
-        assert ctrl_vars['status'] == a_status
-        assert ctrl_vars['severity'] == a_sevr
+
+        try:
+            wait_for(
+                partial(check_status_severity, a_status, a_sevr),
+                timeout=2.0,
+            )
+        except TimeoutError:
+            ctrl_vars = PV.get_ctrlvars()
+            assert ctrl_vars['status'] == a_status
+            assert ctrl_vars['severity'] == a_sevr
