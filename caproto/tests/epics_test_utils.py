@@ -10,10 +10,6 @@ import datetime
 import subprocess
 
 import asyncio
-import curio
-import curio.subprocess
-
-import trio
 
 import caproto as ca
 
@@ -75,8 +71,10 @@ async def run_epics_base_binary(backend, *args, max_attempts=3):
         return raw_stdout, raw_stderr
 
     if backend == 'curio':
+        import curio
         raw_stdout, raw_stderr = await curio.run_in_thread(runner)
     elif backend == 'trio':
+        import trio
         raw_stdout, raw_stderr = await trio.to_thread.run_sync(runner)
     elif backend == 'asyncio':
         loop = asyncio.get_event_loop()

@@ -1,13 +1,14 @@
 import logging
 import pytest
 
-import curio
 
 import caproto as ca
 from .epics_test_utils import run_caget, has_caget
 
 
 REPEATER_PORT = 5065
+
+curio = pytest.importorskip('curio')
 
 
 @pytest.mark.skipif(not has_caget(), reason='no caget')

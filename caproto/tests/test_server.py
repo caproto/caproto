@@ -316,6 +316,7 @@ def test_char_write(request, type_varieties_ioc):
 
 @pytest.mark.parametrize('async_lib', ['asyncio', 'curio', 'trio'])
 def test_write_without_notify(request, prefix, async_lib):
+    pytest.importorskip(async_lib)
     pv = f'{prefix}pi'
     run_example_ioc(
         'caproto.ioc_examples.advanced.type_varieties',
@@ -366,6 +367,7 @@ def test_data_copy(cls, kwargs):
 
 @pytest.mark.parametrize('async_lib', ['asyncio', 'curio', 'trio'])
 def test_process_field(request, prefix, async_lib):
+    pytest.importorskip(async_lib)
     run_example_ioc('caproto.tests.ioc_process', request=request,
                     args=['--prefix', prefix, '--async-lib', async_lib],
                     pv_to_check=f'{prefix}record.PROC')
