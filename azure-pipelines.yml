@@ -1,109 +1,112 @@
 # vi: sw=2 ts=2 sts=2 expandtab
 #
 jobs:
+  - job: "Test"
+    pool:
+      vmImage: "ubuntu-22.04"
+    strategy:
+      matrix:
+        Python 3.9:
+          python.version: "3.9"
+        Python 3.10:
+          python.version: "3.10"
+        Python 3.11:
+          python.version: "3.11"
+        Python 3.12:
+          python.version: "3.12"
+        Python 3.13:
+          python.version: "3.13"
 
-- job: 'Test'
-  pool:
-    vmImage: 'ubuntu-22.04'
-  strategy:
-    matrix:
-      Python 3.9:
-        python.version: '3.9'
-      Python 3.10:
-        python.version: '3.10'
-      Python 3.11:
-        python.version: '3.11'
+    steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "$(python.version)"
+          architecture: "x64"
 
-  steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '$(python.version)'
-      architecture: 'x64'
+      - bash: |
+          git submodule update --init --recursive
+        displayName: "Checkout submodules"
 
-  - bash: |
-      git submodule update --init --recursive
-    displayName: 'Checkout submodules'
+      - bash: |
+          pushd /home
+          sudo ln -sf $USER travis
+          ls -la /home
+          popd
+        displayName: "Pretend azure is travis"
 
-  - bash: |
-      pushd /home
-      sudo ln -sf $USER travis
-      ls -la /home
-      popd
-    displayName: 'Pretend azure is travis'
+      - bash: |
+          /sbin/ifconfig
+          ip addr
+          env
+          pwd
+          cp .ci/azure_env.sh $HOME
+        displayName: "Configure the environment"
 
-  - bash: |
-      /sbin/ifconfig
-      ip addr
-      env
-      pwd
-      cp .ci/azure_env.sh $HOME
-    displayName: 'Configure the environment'
+      - bash: |
+          wget -O Miniforge3.sh "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+          bash Miniforge3.sh -b -p "${HOME}/conda"
+        displayName: "Install miniforge"
 
-  - bash: |
-      wget -O Miniforge3.sh "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
-      bash Miniforge3.sh -b -p "${HOME}/conda"
-    displayName: 'Install miniforge'
+      - bash: |
+          source "${HOME}/conda/etc/profile.d/conda.sh"
+          hash -r
+          conda info -a
+          conda create -y -q -n test_env python=${PYTHON_VERSION} epics-base
+        displayName: "Create test environment"
 
-  - bash: |
-      source "${HOME}/conda/etc/profile.d/conda.sh"
-      hash -r
-      conda info -a
-      conda create -y -q -n test_env python=${PYTHON_VERSION} epics-base
-    displayName: 'Create test environment'
+      - bash: |
+          source $HOME/azure_env.sh
+          python -m pip install --upgrade pip
 
-  - bash: |
-      source $HOME/azure_env.sh
-      python -m pip install --upgrade pip
+          python -m pip install .[test]
+          python -m pip install -Ur requirements-test.txt
+          # python -m pip install --quiet --upgrade cython
+        displayName: "Install caproto"
 
-      python -m pip install .[test]
-      python -m pip install -Ur requirements-test.txt
-      # python -m pip install --quiet --upgrade cython
-    displayName: 'Install caproto'
+      - bash: |
+          source $HOME/azure_env.sh
+          python -c "from caproto.tests.conftest import run_example_ioc; run_example_ioc('caproto.ioc_examples.simple', request=None, args=['--prefix', 'azure_test:', '--async-lib', 'trio'], pv_to_check='azure_test:A')"
+          sleep 2
+          caproto-get -vvv azure_test:A
+          caget azure_test:pi
+          sleep 2
+          killall python
+        displayName: "simple caproto IOC test"
 
-  - bash: |
-      source $HOME/azure_env.sh
-      python -c "from caproto.tests.conftest import run_example_ioc; run_example_ioc('caproto.ioc_examples.simple', request=None, args=['--prefix', 'azure_test:', '--async-lib', 'trio'], pv_to_check='azure_test:A')"
-      sleep 2
-      caproto-get -vvv azure_test:A
-      caget azure_test:pi
-      sleep 2
-      killall python
-    displayName: 'simple caproto IOC test'
+      - bash: |
+          source $HOME/azure_env.sh
+          coverage run --parallel-mode run_tests.py --timeout=100 --junitxml=junit/test-results.xml
+        displayName: "pytest"
 
-  - bash: |
-      source $HOME/azure_env.sh
-      coverage run --parallel-mode run_tests.py --timeout=100 --junitxml=junit/test-results.xml
-    displayName: 'pytest'
+      - bash: |
+          source $HOME/azure_env.sh
+          coverage combine --append
+          coverage report -m
+        displayName: "Report coverage"
 
-  - bash: |
-      source $HOME/azure_env.sh
-      coverage combine --append
-      coverage report -m
-    displayName: 'Report coverage'
+      - bash: |
+          source $HOME/azure_env.sh
+          if [ -f junit/test-results.xml ]; then
+            python caproto/tests/view_leaks.py junit/test-results.xml
+          fi
+        displayName: "Debug leaks"
 
-  - bash: |
-      source $HOME/azure_env.sh
-      if [ -f junit/test-results.xml ]; then
-        python caproto/tests/view_leaks.py junit/test-results.xml
-      fi
-    displayName: 'Debug leaks'
+      - task: PublishTestResults@2
+        inputs:
+          testResultsFiles: "**/test-results.xml"
+          testRunTitle: "Python $(python.version)"
+        condition: succeededOrFailed()
 
-  - task: PublishTestResults@2
-    inputs:
-      testResultsFiles: '**/test-results.xml'
-      testRunTitle: 'Python $(python.version)'
-    condition: succeededOrFailed()
+  - job: "Publish"
+    dependsOn: "Test"
+    pool:
+      vmImage: "ubuntu-22.04"
 
-- job: 'Publish'
-  dependsOn: 'Test'
-  pool:
-    vmImage: 'ubuntu-22.04'
+    steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.10"
+          architecture: "x64"
 
-  steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.10'
-      architecture: 'x64'
-
-  - script: python setup.py sdist
-    displayName: 'Build sdist'
+      - script: python setup.py sdist
+        displayName: "Build sdist"
