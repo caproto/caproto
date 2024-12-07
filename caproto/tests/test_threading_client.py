@@ -7,6 +7,7 @@ import getpass
 import socket
 import threading
 import time
+import typing
 
 import pytest
 
@@ -381,6 +382,16 @@ def test_subscription_objects_are_reused(ioc, context):
     assert actual_cached_subs == set([sub, sub_different])
 
 
+def wait_for(func: typing.Callable[[], bool], timeout: float) -> None:
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
+        if func():
+            return
+        time.sleep(max((timeout / 10.), 0.1))
+
+    raise TimeoutError(f"Condition {func} not successful within {timeout}")
+
+
 def test_unsubscribe_all(ioc, context):
     pv, = context.get_pvs(ioc.pvs['int'])
     pv.wait_for_connection(timeout=10)
@@ -394,12 +405,20 @@ def test_unsubscribe_all(ioc, context):
 
     sub0.add_callback(f)
     sub1.add_callback(f)
-    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+
+    def check_num_subs(num: int) -> bool:
+        return len(collector) == num
+
+    # Wait for EventAddRequest to be sent and processed.
+    wait_for(functools.partial(check_num_subs, 2), timeout=1)
 
     pv.write((123,))
     pv.write((456,))
-    time.sleep(0.2)  # Wait for the updates to process.
+
+    # Wait for EventAddRequest to be sent and processed.
+    wait_for(functools.partial(check_num_subs, 6), timeout=2)
     assert len(collector) == 6
+
     pv.unsubscribe_all()
     # Unsubscribing is synchronous -- no need to sleep here.
     collector.clear()
