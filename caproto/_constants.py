@@ -8,7 +8,10 @@ MAX_ID = 2**16  # max value of various integer IDs
 EPICS_CA1_PORT, EPICS_CA2_PORT = 5064, 5065
 
 EPICS2UNIX_EPOCH = 631152000.0
-EPICS_EPOCH = datetime.datetime.utcfromtimestamp(EPICS2UNIX_EPOCH)
+try:
+    EPICS_EPOCH = datetime.datetime.fromtimestamp(EPICS2UNIX_EPOCH, datetime.UTC)
+except AttributeError:
+    EPICS_EPOCH = datetime.datetime.utcfromtimestamp(EPICS2UNIX_EPOCH)
 
 MAX_STRING_SIZE = 40
 MAX_UNITS_SIZE = 8
