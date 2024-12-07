@@ -9,47 +9,47 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Install caproto
-      run: |
-        git fetch --tags
-        python -m pip install --upgrade pip
-        python -m pip install .[test]
+      - name: Install caproto
+        run: |
+          git fetch --tags
+          python -m pip install --upgrade pip
+          python -m pip install .[test]
 
-    - name: Fix temporary test suite issues
-      run: |
-        python -m pip uninstall --yes curio
-        python -m pip install git+https://github.com/dabeaz/curio@8667999a81f9daa147d2032b6985fc367679f095
+      - name: Fix temporary test suite issues
+        run: |
+          python -m pip uninstall --yes curio
+          python -m pip install git+https://github.com/dabeaz/curio@8667999a81f9daa147d2032b6985fc367679f095
 
-    - name: Test with pytest
-      env:
-        CAPROTO_SKIP_MOTORSIM_TESTS: 1
-      run: |
-        coverage run --parallel-mode run_tests.py --timeout=100 --junitxml=junit/test-results.xml
+      - name: Test with pytest
+        env:
+          CAPROTO_SKIP_MOTORSIM_TESTS: 1
+        run: |
+          coverage run --parallel-mode run_tests.py --timeout=100 --junitxml=junit/test-results.xml
 
-    - name: Coverage report
-      run: |
-        coverage combine --append
-        coverage report -m
+      - name: Coverage report
+        run: |
+          coverage combine --append
+          coverage report -m
 
-    - name: Leak report
-      run: |
-        python caproto/tests/view_leaks.py junit/test-results.xml
+      - name: Leak report
+        run: |
+          python caproto/tests/view_leaks.py junit/test-results.xml
 
-    - name: Upload Unit Test Results
-      if: always()
-      uses: actions/upload-artifact@v3
-      with:
-        name: Unit Test Results (Python ${{ matrix.python-version }})
-        path: junit/test-results.xml
+      - name: Upload Unit Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: Unit Test Results (Python ${{ matrix.python-version }})
+          path: junit/test-results.xml
 
-    - name: Upload code coverage
-      uses: codecov/codecov-action@v3
+      - name: Upload code coverage
+        uses: codecov/codecov-action@v3
