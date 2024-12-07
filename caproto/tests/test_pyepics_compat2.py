@@ -4,10 +4,12 @@ not use the pyepics test IOCs and can safely be run in parallel.
 """
 
 import pytest
+
+from caproto.threading.client import Context, SharedBroadcaster
+from caproto.threading.pyepics_compat import get_pv
+
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
-from caproto.threading.pyepics_compat import get_pv
-from caproto.threading.client import (Context, SharedBroadcaster)
 
 
 @pytest.fixture(scope='function')
@@ -50,5 +52,5 @@ def test_put_empty_list(context, ioc):
     assert pv.connected
 
     pv.put([], wait=True)
-    ret = pv.get()
+    ret = pv.get(use_monitor=False)
     assert list(ret) == []
