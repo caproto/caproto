@@ -955,8 +955,6 @@ class PV:
 
 
 def get_pv(pvname, *args, context=None, connect=False, timeout=5, **kwargs):
-    if context is None:
-        context = PV._default_context
     pv = PV(pvname, *args, context=context, **kwargs)
     if connect:
         pv.wait_for_connection(timeout=timeout)
