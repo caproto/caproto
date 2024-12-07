@@ -594,7 +594,7 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     sub.clear()
 
 
-@pytest.mark.xfail
+@pytest.mark.flaky(reruns=3)
 def test_multithreaded_many_subscribe(ioc, context, thread_count,
                                       multi_iterations):
     def _test(thread_id):
