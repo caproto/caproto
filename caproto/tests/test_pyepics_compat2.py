@@ -3,6 +3,9 @@ This is separate from the test_pyepics_compat file because it does
 not use the pyepics test IOCs and can safely be run in parallel.
 """
 
+import subprocess
+import sys
+
 import pytest
 
 from caproto.threading.client import Context, SharedBroadcaster
@@ -64,3 +67,21 @@ def test_caget_caput(context, ioc):
         return list(caget(ioc.pvs['waveform'])) == [1, 2, 3]
 
     wait_for(new_value, timeout=2)
+
+
+def test_no_early_threads():
+    c = """
+import threading
+
+assert len(threading.enumerate()) == 1
+import caproto.threading.pyepics_compat
+
+assert len(threading.enumerate()) == 1
+pv = caproto.threading.pyepics_compat.PV("bob")
+assert len(threading.enumerate()) > 1
+"""
+
+    try:
+        subprocess.run([sys.executable, "-c", c], check=True, timeout=5)
+    except subprocess.CalledProcessError as err:
+        pytest.fail("Subprocess failed to test intended behavior\n" + str(err.stderr))

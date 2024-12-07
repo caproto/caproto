@@ -19,6 +19,11 @@ from .client import Context, SharedBroadcaster
 __all__ = ('PV', 'get_pv', 'caget', 'caput')
 
 
+@functools.lru_cache(1)
+def _make_context():
+    return Context(SharedBroadcaster())
+
+
 class AccessRightsException(ca.CaprotoError):
     ...
 
@@ -185,7 +190,10 @@ class PV:
                'lower_alarm_limit', 'lower_warning_limit',
                'upper_warning_limit', 'upper_ctrl_limit', 'lower_ctrl_limit',
                'put_complete')
-    _default_context = Context(SharedBroadcaster())
+
+    @functools.cached_property
+    def _default_context(self):
+        return _make_context()
 
     def __init__(self, pvname, callback=None, form='time',
                  verbose=False, auto_monitor=None, count=None,
@@ -320,8 +328,7 @@ class PV:
 
     def _check_auto_monitor_sub(self, count=None):
         'Ensure auto-monitor subscription is running'
-        if ((self.auto_monitor and self.callbacks) and
-                not self._auto_monitor_sub):
+        if self.auto_monitor and not self._auto_monitor_sub:
             if count is None:
                 count = self.default_count
 
