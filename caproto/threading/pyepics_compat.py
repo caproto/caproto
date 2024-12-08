@@ -968,7 +968,7 @@ def get_pv(pvname, *args, context=None, connect=False, timeout=5, **kwargs):
     return pv
 
 
-def caput(pvname, value, wait=False, timeout=60):
+def caput(pvname, value, wait=False, timeout=60, context=None):
     """caput(pvname, value, wait=False, timeout=60)
     simple put to a pv's value.
        >>> caput('xx.VAL',3.0)
@@ -976,13 +976,13 @@ def caput(pvname, value, wait=False, timeout=60):
     to wait for pv to complete processing, use 'wait=True':
        >>> caput('xx.VAL',3.0,wait=True)
     """
-    thispv = get_pv(pvname, connect=True)
+    thispv = get_pv(pvname, connect=True, context=context)
     if thispv.connected:
         return thispv.put(value, wait=wait, timeout=timeout)
 
 
 def caget(pvname, as_string=False, count=None, as_numpy=True,
-          use_monitor=False, timeout=5.0):
+          use_monitor=False, timeout=5.0, context=None):
     """caget(pvname, as_string=False)
     simple get of a pv's value..
        >>> x = caget('xx.VAL')
@@ -996,7 +996,7 @@ def caget(pvname, as_string=False, count=None, as_numpy=True,
        >>> x = caget('MyArray.VAL', count=1000)
     """
     start_time = time.time()
-    thispv = get_pv(pvname, timeout=timeout, connect=True)
+    thispv = get_pv(pvname, timeout=timeout, connect=True, context=context)
     if thispv.connected:
         if as_string:
             thispv.get_ctrlvars()

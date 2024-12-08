@@ -61,10 +61,10 @@ def test_put_empty_list(context, ioc):
 
 
 def test_caget_caput(context, ioc):
-    caput(ioc.pvs['waveform'], [1, 2, 3], wait=True)
+    caput(ioc.pvs['waveform'], [1, 2, 3], wait=True, context=context)
 
     def new_value():
-        return list(caget(ioc.pvs['waveform'])) == [1, 2, 3]
+        return list(caget(ioc.pvs['waveform'], context=context)) == [1, 2, 3]
 
     wait_for(new_value, timeout=2)
 
