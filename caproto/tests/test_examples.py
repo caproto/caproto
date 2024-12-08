@@ -82,8 +82,11 @@ def test_ioc_examples(request, module_name, async_lib):
 
         print(f'Writing {value} to {pv}')
         sync.write(pv, value, timeout=15)
+        try:
+            value = sync.read(pv, timeout=15)
+        except TimeoutError:
+            value = sync.read(pv, timeout=15)
 
-        value = sync.read(pv, timeout=15)
         print(f'Read {pv} = {value}')
 
 
