@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import typing
 import uuid
 from types import SimpleNamespace
 from typing import Callable, Dict
@@ -972,3 +973,13 @@ def pytest_runtest_call(item):
 @pytest.fixture(scope='session', params=list(ca.server.records.records))
 def record_type_name(request):
     return request.param
+
+
+def wait_for(func: typing.Callable[[], bool], timeout: float) -> None:
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
+        if func():
+            return
+        time.sleep(max((timeout / 10.), 0.1))
+
+    raise TimeoutError(f"Condition {func} not successful within {timeout}")

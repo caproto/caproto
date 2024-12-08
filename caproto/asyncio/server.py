@@ -69,9 +69,8 @@ class VirtualCircuit(_VirtualCircuit):
     async def get_from_sub_queue(self, timeout=None):
         # Timeouts work very differently between our server implementations,
         # so we do this little stub in its own method.
-        fut = asyncio.ensure_future(self.subscription_queue.get())
         try:
-            return await asyncio.wait_for(fut, timeout)
+            return await asyncio.wait_for(self.subscription_queue.get(), timeout)
         except asyncio.TimeoutError:
             return None
 
