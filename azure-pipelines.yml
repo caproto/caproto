@@ -65,6 +65,13 @@ jobs:
 
       - bash: |
           source $HOME/azure_env.sh
+
+          python -m pip uninstall --yes curio
+          python -m pip install git+https://github.com/dabeaz/curio@8667999a81f9daa147d2032b6985fc367679f095
+        displayName: "Test with specific curio version"
+
+      - bash: |
+          source $HOME/azure_env.sh
           python -c "from caproto.tests.conftest import run_example_ioc; run_example_ioc('caproto.ioc_examples.simple', request=None, args=['--prefix', 'azure_test:', '--async-lib', 'trio'], pv_to_check='azure_test:A')"
           sleep 2
           caproto-get -vvv azure_test:A
