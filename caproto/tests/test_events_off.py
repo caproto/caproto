@@ -45,6 +45,7 @@ def test_issue_797(
     async_lib: str,
     issue_797_pvnames: list[str],
 ):
+    pytest.importorskip(async_lib)
     run_example_ioc(
         "caproto.tests.issue_797_server",
         request=request,

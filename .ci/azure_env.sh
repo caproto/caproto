@@ -10,7 +10,7 @@ echo '--- azure environment ---'
 env | grep EPIC
 echo '--- azure environment ---'
 
-source "$HOME/miniconda/etc/profile.d/conda.sh"
+source "$HOME/conda/etc/profile.d/conda.sh"
 hash -r
 
 conda activate test_env

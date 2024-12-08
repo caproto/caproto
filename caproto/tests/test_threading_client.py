@@ -20,6 +20,7 @@ from caproto.threading.client import (Batch, Context, ContextDisconnectedError,
 
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
+from .conftest import wait_for
 
 THREAD_TIMEOUT_SCALE = 2
 
@@ -394,12 +395,20 @@ def test_unsubscribe_all(ioc, context):
 
     sub0.add_callback(f)
     sub1.add_callback(f)
-    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+
+    def check_num_subs(num: int) -> bool:
+        return len(collector) == num
+
+    # Wait for EventAddRequest to be sent and processed.
+    wait_for(functools.partial(check_num_subs, 2), timeout=1)
 
     pv.write((123,))
     pv.write((456,))
-    time.sleep(0.2)  # Wait for the updates to process.
+
+    # Wait for EventAddRequest to be sent and processed.
+    wait_for(functools.partial(check_num_subs, 6), timeout=2)
     assert len(collector) == 6
+
     pv.unsubscribe_all()
     # Unsubscribing is synchronous -- no need to sleep here.
     collector.clear()
@@ -585,7 +594,7 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     sub.clear()
 
 
-@pytest.mark.xfail
+@pytest.mark.flaky(reruns=3)
 def test_multithreaded_many_subscribe(ioc, context, thread_count,
                                       multi_iterations):
     def _test(thread_id):
