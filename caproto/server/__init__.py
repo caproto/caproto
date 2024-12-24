@@ -10,7 +10,8 @@ from .server import (AsyncLibraryLayer, NestedPvproperty, PVGroup,
                      PVSpec, SubGroup, channeldata_from_pvspec,
                      data_class_from_pvspec, expand_macros,
                      get_pv_pair_wrapper, ioc_arg_parser, pvfunction,
-                     pvproperty, run, scan_wrapper, template_arg_parser)
+                     pvproperty, run, scan_wrapper, template_arg_parser,
+                     extend_arg_parser)
 
 __all__ = [
     "conversion",
@@ -24,6 +25,7 @@ __all__ = [
     "channeldata_from_pvspec",
     "data_class_from_pvspec",
     "expand_macros",
+    "extend_arg_parser",
     "get_pv_pair_wrapper",
     "pvfunction",
     "scan_wrapper",
