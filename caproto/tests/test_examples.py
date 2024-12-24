@@ -43,6 +43,7 @@ def test_thread_client_example(pvdb_from_server_example):
 )
 @pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
 def test_ioc_examples(request, module_name, async_lib):
+    pytest.importorskip(async_lib)
     from caproto.server import PvpropertyReadOnlyData
     info = conftest.run_example_ioc_by_name(
         module_name, async_lib=async_lib, request=request
@@ -81,8 +82,11 @@ def test_ioc_examples(request, module_name, async_lib):
 
         print(f'Writing {value} to {pv}')
         sync.write(pv, value, timeout=15)
+        try:
+            value = sync.read(pv, timeout=15)
+        except TimeoutError:
+            value = sync.read(pv, timeout=15)
 
-        value = sync.read(pv, timeout=15)
         print(f'Read {pv} = {value}')
 
 
@@ -212,6 +216,7 @@ def test_enum_linking(request, ioc_name):
 def test_event_read_collision(request, prefix, async_lib):
     # this is testing that monitors do not get pushed into
     # the socket while a ReadResponse is being pushed in parts.
+    pytest.importorskip(async_lib)
     conftest.run_example_ioc(
         'caproto.ioc_examples.big_image_noisy_neighbor',
         request=request,

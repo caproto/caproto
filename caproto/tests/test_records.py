@@ -51,13 +51,21 @@ def test_limit_fields_and_description(request, prefix, context, records_ioc):
 def test_alarms(request, prefix, sevr_target, sevr_value, context, records_ioc):
     pv = records_ioc.pvs["C"]
     PV = get_pv(pv, context=context)
-    get_pv(f'{pv}.{sevr_target}', context=context).put(
-        sevr_value, wait=True)
+    sevr_target_pv = get_pv(f'{pv}.{sevr_target}', context=context)
+    sevr_target_pv.put(sevr_value, wait=True)
 
     def get_severity(postfix):
-        return get_pv(f'{pv}.{postfix}',
-                      context=context).get(
-                          as_string=False)
+        if postfix == sevr_target:
+            postfix_pv = sevr_target_pv
+        else:
+            postfix_pv = get_pv(f'{pv}.{postfix}', context=context)
+
+        return postfix_pv.get(
+            as_string=False,
+            use_monitor=False,
+        )
+
+    assert get_severity(sevr_target) == sevr_value, "Specified severity not set"
 
     checks = (
         ('lower_ctrl_limit', 'lower_alarm_limit',
@@ -72,10 +80,12 @@ def test_alarms(request, prefix, sevr_target, sevr_value, context, records_ioc):
          AlarmStatus.HIHI, get_severity('HHSV')),
 
     )
+
     for minv, maxv, a_status, a_sevr in checks:
         ctrl_vars = PV.get_ctrlvars()
         v = (ctrl_vars[minv] + ctrl_vars[maxv]) / 2
         PV.put(v, wait=True)
+
         ctrl_vars = PV.get_ctrlvars()
         assert ctrl_vars['status'] == a_status
         assert ctrl_vars['severity'] == a_sevr

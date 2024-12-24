@@ -7,10 +7,13 @@ import subprocess
 import sys
 
 import pytest
+
+from caproto.threading.client import Context, SharedBroadcaster
+from caproto.threading.pyepics_compat import caget, caput, get_pv
+
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
-from caproto.threading.pyepics_compat import get_pv
-from caproto.threading.client import (Context, SharedBroadcaster)
+from .conftest import wait_for
 
 
 @pytest.fixture(scope='function')
@@ -53,8 +56,17 @@ def test_put_empty_list(context, ioc):
     assert pv.connected
 
     pv.put([], wait=True)
-    ret = pv.get()
+    ret = pv.get(use_monitor=False)
     assert list(ret) == []
+
+
+def test_caget_caput(context, ioc):
+    caput(ioc.pvs['waveform'], [1, 2, 3], wait=True, context=context)
+
+    def new_value():
+        return list(caget(ioc.pvs['waveform'], context=context)) == [1, 2, 3]
+
+    wait_for(new_value, timeout=2)
 
 
 def test_no_early_threads():
