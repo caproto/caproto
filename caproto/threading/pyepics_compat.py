@@ -151,6 +151,9 @@ def _pyepics_get_value(value, string_value, full_type, native_count, *,
     elif not as_numpy:
         return value.tolist()
 
+    if not value.dtype.isnative:
+        value = value.byteswap().view(value.dtype.newbyteorder('='))
+
     return value
 
 
