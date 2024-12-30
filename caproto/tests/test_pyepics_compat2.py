@@ -94,6 +94,6 @@ def test_native_endianess(context, ioc):
     assert pv.connected
 
     pv.put([1, 2, 3], wait=True)
-    ret = pv.get()
+    ret = pv.get(use_monitor=False)
     assert list(ret) == [1, 2, 3]
     assert ret.dtype.isnative
