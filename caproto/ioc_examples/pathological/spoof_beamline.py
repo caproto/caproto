@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from caproto import (ChannelChar, ChannelData, ChannelDouble, ChannelEnum,
                      ChannelInteger, ChannelString)
-from caproto.server import ioc_arg_parser, run
+from caproto.server import ioc_arg_parser, PVGroup, run
 
 PLUGIN_TYPE_PVS = [
     (re.compile('image\\d:'), 'NDPluginStdArrays'),
@@ -41,42 +41,59 @@ class ReallyDefaultDict(defaultdict):
         ret = self[key] = self.default_factory(key)
         return ret
 
+class BlackholeIOC(PVGroup):
+    """
+    IOC that spoofs a beamline.
 
-def fabricate_channel(key):
-    if 'PluginType' in key:
-        for pattern, val in PLUGIN_TYPE_PVS:
-            if pattern.search(key):
-                return ChannelString(value=val)
-    elif 'ArrayPort' in key:
-        return ChannelString(value=key)
-    elif 'EnableCallbacks' in key:
-        return ChannelEnum(value=0, enum_strings=['Disabled', 'Enabled'])
-    elif 'BlockingCallbacks' in key:
-        return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
-    elif 'Auto' in key:
-        return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
-    elif 'ImageMode' in key:
-        return ChannelEnum(value=0, enum_strings=['Single', 'Multiple', 'Continuous'])
-    elif 'WriteMode' in key:
-        return ChannelEnum(value=0, enum_strings=['Single', 'Capture', 'Stream'])
-    elif 'ArraySize' in key:
-        return ChannelData(value=10)
-    elif 'TriggerMode' in key:
-        return ChannelEnum(value=0, enum_strings=['Internal', 'External'])
-    elif 'FileWriteMode' in key:
-        return ChannelEnum(value=0, enum_strings=['Single'])
-    elif 'FilePathExists' in key:
-        return ChannelData(value=1)
-    elif 'WaitForPlugins' in key:
-        return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
-    elif ('file' in key.lower() and 'number' not in key.lower() and
-          'mode' not in key.lower()):
-        return ChannelChar(value='a' * 250)
-    elif ('filenumber' in key.lower()):
-        return ChannelInteger(value=0)
-    elif 'Compression' in key:
-        return ChannelEnum(value=0, enum_strings=['None', 'N-bit', 'szip', 'zlib', 'blosc'])
-    return ChannelDouble(value=0.0)
+    You can set up SubGroups for beamline components that interact with each other.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Copy the original pvdb so we can use it for channels
+        self.old_pvdb = self.pvdb.copy()
+        # Reset the pvdb to use our fabricate_channel function
+        self.pvdb = ReallyDefaultDict(self.fabricate_channel)
+
+    def fabricate_channel(self, key):
+        # Use existing channels if they exist
+        if key in self.old_pvdb:
+            return self.old_pvdb[key]
+        if 'PluginType' in key:
+            for pattern, val in PLUGIN_TYPE_PVS:
+                if pattern.search(key):
+                    return ChannelString(value=val)
+        elif 'ArrayPort' in key:
+            return ChannelString(value=key)
+        elif 'PortName' in key:
+            return ChannelString(value=key)
+        elif 'EnableCallbacks' in key:
+            return ChannelEnum(value=0, enum_strings=['Disabled', 'Enabled'])
+        elif 'BlockingCallbacks' in key:
+            return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
+        elif 'Auto' in key:
+            return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
+        elif 'ImageMode' in key:
+            return ChannelEnum(value=0, enum_strings=['Single', 'Multiple', 'Continuous'])
+        elif 'WriteMode' in key:
+            return ChannelEnum(value=0, enum_strings=['Single', 'Capture', 'Stream'])
+        elif 'ArraySize' in key:
+            return ChannelData(value=10)
+        elif 'TriggerMode' in key:
+            return ChannelEnum(value=0, enum_strings=['Internal', 'External'])
+        elif 'FileWriteMode' in key:
+            return ChannelEnum(value=0, enum_strings=['Single'])
+        elif 'FilePathExists' in key:
+            return ChannelData(value=1)
+        elif 'WaitForPlugins' in key:
+            return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
+        elif ('file' in key.lower() and 'number' not in key.lower() and
+            'mode' not in key.lower()):
+            return ChannelChar(value='a' * 250)
+        elif ('filenumber' in key.lower()):
+            return ChannelInteger(value=0)
+        elif 'Compression' in key:
+            return ChannelEnum(value=0, enum_strings=['None', 'N-bit', 'szip', 'zlib', 'blosc'])
+        return ChannelDouble(value=0.0)
 
 
 def main():
@@ -107,7 +124,7 @@ Press return if you have acknowledged the above, or Ctrl-C to quit.''')
         default_prefix='',
         desc="PV black hole")
     run_options['interfaces'] = ['127.0.0.1']
-    run(ReallyDefaultDict(fabricate_channel),
+    run(BlackholeIOC().pvdb,
         **run_options)
 
 
