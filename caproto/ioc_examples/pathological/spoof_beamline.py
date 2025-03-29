@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from caproto import (ChannelChar, ChannelData, ChannelDouble, ChannelEnum,
                      ChannelInteger, ChannelString)
-from caproto.server import ioc_arg_parser, PVGroup, run
+from caproto.server import PVGroup, ioc_arg_parser, run
 
 PLUGIN_TYPE_PVS = [
     (re.compile('image\\d:'), 'NDPluginStdArrays'),
@@ -40,6 +40,7 @@ class ReallyDefaultDict(defaultdict):
             return self[key[:-4]]
         ret = self[key] = self.default_factory(key)
         return ret
+
 
 class BlackholeIOC(PVGroup):
     """
@@ -86,8 +87,7 @@ class BlackholeIOC(PVGroup):
             return ChannelData(value=1)
         elif 'WaitForPlugins' in key:
             return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
-        elif ('file' in key.lower() and 'number' not in key.lower() and
-            'mode' not in key.lower()):
+        elif ('file' in key.lower() and 'number' not in key.lower() and 'mode' not in key.lower()):
             return ChannelChar(value='a' * 250)
         elif ('filenumber' in key.lower()):
             return ChannelInteger(value=0)
