@@ -61,7 +61,7 @@ jobs:
           set -e
           make html
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: built-docs
           path: doc/build/html
