@@ -48,6 +48,10 @@ class BlackholeIOC(PVGroup):
 
     You can set up SubGroups for beamline components that interact with each other.
     """
+
+    # Special PVs or SubGroups may be defined here or in a subclass:
+    # custom_pv = pvproperty(value=123)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Copy the original pvdb so we can use it for channels
@@ -124,8 +128,8 @@ Press return if you have acknowledged the above, or Ctrl-C to quit.''')
         default_prefix='',
         desc="PV black hole")
     run_options['interfaces'] = ['127.0.0.1']
-    run(BlackholeIOC().pvdb,
-        **run_options)
+    ioc = BlackholeIOC(prefix="")
+    run(ioc.pvdb, **run_options)
 
 
 if __name__ == '__main__':
