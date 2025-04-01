@@ -194,8 +194,10 @@ class PV:
                'upper_warning_limit', 'upper_ctrl_limit', 'lower_ctrl_limit',
                'put_complete')
 
-    @functools.cached_property
-    def _default_context(self):
+    @classmethod
+    @property
+    @functools.cache
+    def _default_context(cls):
         return _make_context()
 
     def __init__(self, pvname, callback=None, form='time',
