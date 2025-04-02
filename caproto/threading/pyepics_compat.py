@@ -196,7 +196,7 @@ class PV:
 
     @classmethod
     @functools.cache
-    def _default_context(cls):
+    def default_context(cls):
         return _make_context()
 
     def __init__(self, pvname, callback=None, form='time',
@@ -206,7 +206,7 @@ class PV:
                  context=None):
 
         if context is None:
-            context = self._default_context()
+            context = self.default_context()
         if context is None:
             raise CaprotoRuntimeError("must have a valid context")
         self._context = context
@@ -1041,7 +1041,7 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     as possible to fetch many values.
     """
     if context is None:
-        context = PV._default_context()
+        context = PV.default_context()
 
     pvs = context.get_pvs(*pvlist)
 
@@ -1113,7 +1113,7 @@ def caput_many(pvlist, values, wait=False, connection_timeout=None,
     if len(pvlist) != len(values):
         raise CaprotoValueError("List of PV names must be equal to list of values.")
 
-    # context = PV._default_context
+    # context = PV.default_context()
     # TODO: context.get_pvs(...)
 
     out = []
