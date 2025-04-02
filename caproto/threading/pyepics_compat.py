@@ -195,7 +195,6 @@ class PV:
                'put_complete')
 
     @classmethod
-    @property
     @functools.cache
     def _default_context(cls):
         return _make_context()
@@ -207,7 +206,7 @@ class PV:
                  context=None):
 
         if context is None:
-            context = self._default_context
+            context = self._default_context()
         if context is None:
             raise CaprotoRuntimeError("must have a valid context")
         self._context = context
@@ -1042,7 +1041,7 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     as possible to fetch many values.
     """
     if context is None:
-        context = PV._default_context
+        context = PV._default_context()
 
     pvs = context.get_pvs(*pvlist)
 
