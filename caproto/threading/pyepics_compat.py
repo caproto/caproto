@@ -1040,7 +1040,7 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     as possible to fetch many values.
     """
     if context is None:
-        context = PV._default_context
+        context = _make_context()
 
     pvs = context.get_pvs(*pvlist)
 
