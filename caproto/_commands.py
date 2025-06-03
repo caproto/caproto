@@ -113,17 +113,23 @@ def has_metadata(data_type):
 
 def from_buffer(data_type, data_count, buffer):
     "Wraps dbr_type.from_buffer and special-case strings."
-    payload_size = data_count * ctypes.sizeof(
-        DBR_TYPES[native_type(data_type)])
     if has_metadata(data_type):
         md_payload = DBR_TYPES[data_type].from_buffer(buffer)
         md_size = ctypes.sizeof(DBR_TYPES[data_type])
     else:
         md_payload = b''
         md_size = 0
-    # Use payload_size to strip off any right-padding that may have been added
-    # to make the byte-size of the payload a multiple of 8.
-    data_payload = memoryview(buffer)[md_size:md_size + payload_size]
+    # Use data_count to strip off any right-padding that may have been added
+    # to make the byte-size of the payload a multiple of 8. Epics-base servers
+    # can report a data_count of 0 when they do not mean it (ReadResponse), so
+    # we have to ignore data_count when it is 0 and just take the whole payload
+    # blindly.
+    if data_count > 0:
+        payload_size = data_count * ctypes.sizeof(
+            DBR_TYPES[native_type(data_type)])
+        data_payload = memoryview(buffer)[md_size:md_size + payload_size]
+    else:
+        data_payload = memoryview(buffer)
     return md_payload, data_payload
 
 
@@ -273,7 +279,9 @@ def extract_data(buffer, data_type, data_count):
     "Return a scalar or big-endian array (numpy.ndarray or array.array)."
     data = backend.epics_to_python(buffer, native_type(data_type), data_count,
                                    auto_byteswap=True)
-    if data_count < len(data):
+    # epics-base servers send data_count=0 but they do not mean it, so we have
+    # slice if data_count is less than len(data) but greater than 0.
+    if 0 < data_count < len(data):
         return data[:data_count]  # (no copy)
     return data
 
