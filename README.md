@@ -131,6 +131,15 @@ These are in no particular order. Feel free to add yours to this list in a Pull 
 | Simulacrum services                                                        | https://github.com/slaclab/simulacrum             |
 | Austin Universal Robot at sector 25                                        | https://github.com/spc-group/ioc-austin           |
 | Icarus Pressure Jump for NMR                                               | https://github.com/vstadnytskyi/icarus-nmr        |
+| Imaging & detector control for Dectris Eiger 2X, extensible                | https://gitlab.com/kmc3-xpp/diss-ioc              |
+| CAmagick, a modular data analysis & IOC pipeline builder                   | https://gitlab.com/kmc3-xpp/camagick              |
+| Huber SMC-9300 motor controller (supports some "official" motor fields)    | https://gitlab.com/kmc3-xpp/exhub-ioc             |
+| Lakeshore LS-336 temperature controller                                    | https://gitlab.com/kmc3-xpp/fridge-ioc            |
+| LightConversion Pharos laser controller                                    | https://gitlab.com/kmc3-xpp/funzel-ioc            |
+| Delay generators (currently: Stanford DG-645, ActiveTechnologies PG-1072)  | https://gitlab.com/kmc3-xpp/kronos-ioc            |
+| Oscilloscopes (currently: Lecroy WaveSurfer, Agilent, ...)                 | https://gitlab.com/kmc3-xpp/ozitrace-ioc          |
+| PiXtendV2 RasPi-based PLC                                                  | https://gitlab.com/kmc3-xpp/pixtend-ioc           |
+| Menlo Syncro RRE and Menlo DDS-120 (beamline-specific pump-probe sync)     | https://gitlab.com/kmc3-xpp/syncster-ioc          |
 
 ### Client-related and miscellaneous examples
 
@@ -146,6 +155,7 @@ Here are some other caproto-adjacent things that may be of interest:
 | startup script for above cookiecutter                                         | https://github.com/pcdshub/cookiecutter-caproto-ioc-startup |
 | Proof-of-concept archiver                                                     | https://github.com/pklaus/caproto-archiver                  |
 | Ancient and likely defunct Apple iOS   caproto IOCs                           | https://github.com/caproto/caproto_ios                      |
+| CAmagick, a modular data analysis & modular pipeline builder                  | https://gitlab.com/kmc3-xpp/camagick                        |
 
 
 Others could be found through: https://github.com/caproto/caproto/network/dependents
