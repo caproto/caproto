@@ -140,6 +140,7 @@ These are in no particular order. Feel free to add yours to this list in a Pull 
 | Oscilloscopes (currently: Lecroy WaveSurfer, Agilent, ...)                 | https://gitlab.com/kmc3-xpp/ozitrace-ioc          |
 | PiXtendV2 RasPi-based PLC                                                  | https://gitlab.com/kmc3-xpp/pixtend-ioc           |
 | Menlo Syncro RRE and Menlo DDS-120 (beamline-specific pump-probe sync)     | https://gitlab.com/kmc3-xpp/syncster-ioc          |
+| Pfeiffer Balzer TPG-366 MaxiGauge (limited, gauge-read only)               | https://gitlab.com/kmc3-xpp/tpg366-ioc            |
 
 ### Client-related and miscellaneous examples
 
