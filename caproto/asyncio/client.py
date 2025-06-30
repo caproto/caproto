@@ -436,7 +436,7 @@ class SharedBroadcaster:
                                 "automatically begin attempting to reconnect "
                                 "to a responsive server.",
                                 *address, circuit_manager)
-                            circuit_manager.disconnect()
+                            await circuit_manager.disconnect()
                     checking.pop(address)
 
             await asyncio.sleep(0.5)
