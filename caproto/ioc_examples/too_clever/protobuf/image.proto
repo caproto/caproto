@@ -1,0 +1,15 @@
+/*
+Adapted from https://github.com/brynmathias/MessageCorps MIT license
+ */
+syntax = 'proto3';
+
+package caproto;
+
+message Image {
+    bytes image_data = 1;
+    int32 row = 2;
+    int32 col = 3;
+    string dtype = 4;
+    int64 frame = 5;
+
+}
