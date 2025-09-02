@@ -195,7 +195,6 @@ class PV:
                'put_complete')
 
     @classmethod
-    @functools.cache
     def default_context(cls):
         return _make_context()
 
@@ -1041,7 +1040,7 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     as possible to fetch many values.
     """
     if context is None:
-        context = _make_context()
+        context = PV.default_context()
 
     pvs = context.get_pvs(*pvlist)
 
