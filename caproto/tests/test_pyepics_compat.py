@@ -172,7 +172,8 @@ def pvnames(request, epics_base_ioc, context):
         def __repr__(self):
             return f'<PVNames prefix={epics_base_ioc.prefix}>'
 
-    PV._default_context = context
+    original_default_context = PV.default_context
+    PV.default_context = classmethod(lambda _: context)
 
     def finalize_context():
         print('Cleaning up PV context')
@@ -185,6 +186,7 @@ def pvnames(request, epics_base_ioc, context):
         assert not sb._command_thread.is_alive()
         assert not sb.selector.thread.is_alive()
         assert not sb._retry_unanswered_searches_thread.is_alive()
+        PV.default_context = original_default_context
         print('Done cleaning up PV context')
 
     request.addfinalizer(finalize_context)
