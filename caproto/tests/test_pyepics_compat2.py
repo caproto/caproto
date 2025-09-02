@@ -85,7 +85,7 @@ assert len(threading.enumerate()) > 1
     try:
         subprocess.run([sys.executable, "-c", c], check=True, timeout=5)
     except subprocess.CalledProcessError as err:
-        pytest.fail("Subprocess failed to test intended behavior\n" + str(err.stderr))
+        pytest.fail("Subprocess failed to test intended behavior\n" + str(err))
 
 
 def test_native_endianess(context, ioc):
