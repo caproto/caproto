@@ -166,6 +166,7 @@ IOCs.
     :toctree: generated
 
     caproto.server.template_arg_parser
+    caproto.server.extend_arg_parser
     caproto.server.ioc_arg_parser
     caproto.server.run
 
