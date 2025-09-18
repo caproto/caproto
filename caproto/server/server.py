@@ -1808,9 +1808,13 @@ class pvfunction(SubGroup):
 
 
 def expand_macros(pv, macros):
-    'Expand a PV name with Python {format-style} macros'
-    return pv.format(**macros)
-
+    '''If macros are given, expand a PV name with Python {format-style} macros. 
+    If macros is an empty dictionary, return the PV unchanged.
+    '''
+    if macros:
+        return pv.format(**macros)
+    else:
+        return pv
 
 class PVGroupMeta(type):
     'Metaclass that finds all pvproperties'
