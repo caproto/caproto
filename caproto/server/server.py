@@ -530,7 +530,12 @@ def check_signature(type_: str, func: Optional[Callable], expect_method: bool) -
     else:
         bound = True
 
-    if not bound or not inspect.iscoroutinefunction(func):
+    if isinstance(func, functools.partial):
+        is_coro = inspect.iscoroutinefunction(func.func)
+    else:
+        is_coro = inspect.iscoroutinefunction(func)
+
+    if not bound or not is_coro:
         try:
             source_file = inspect.getsourcefile(func)
             _, source_line = inspect.getsourcelines(func)
