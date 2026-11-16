@@ -2,10 +2,10 @@ import array
 import copy
 import ctypes
 import sys
-from ._backend import Backend, register_backend, convert_values
-from ._dbr import (ChannelType, DbrStringArray, native_int_types,
-                   native_float_types, native_types, DBR_TYPES)
 
+from ._backend import Backend, convert_values, register_backend
+from ._dbr import (DBR_TYPES, ChannelType, DbrStringArray, native_float_types,
+                   native_int_types, native_types)
 
 default_endian = ('>' if sys.byteorder == 'big'
                   else '<')
@@ -45,7 +45,7 @@ type_map = {
     ChannelType.INT: 'h',
     ChannelType.FLOAT: 'f',
     ChannelType.ENUM: 'H',
-    ChannelType.CHAR: 'b',
+    ChannelType.CHAR: 'B',
     ChannelType.LONG: 'i',
     ChannelType.DOUBLE: 'd',
 

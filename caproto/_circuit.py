@@ -695,7 +695,7 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
+        data : scalar, tuple, ``numpy.ndarray``, ``array.array``, or bytes
         data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
@@ -717,8 +717,10 @@ class ClientChannel(_BaseChannel):
         WriteNotifyRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
+        if not isinstance(data, Iterable):
+            data = [data]
         if native_type(data_type) != ChannelType.CHAR:
-            if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+            if isinstance(data, (str, bytes)):
                 data = [data]
             if len(data) and isinstance(data[0], str):
                 data = [val.encode(self.string_encoding) for val in data]
