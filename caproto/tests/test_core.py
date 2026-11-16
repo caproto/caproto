@@ -1,5 +1,9 @@
+import array
+
 import pytest
+
 import caproto as ca
+from caproto._dbr import DBR_TIME_CHAR
 
 
 def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
@@ -19,6 +23,83 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
     for command in commands:
         cli_circuit.process_command(command)
     return cli_channel, srv_channel
+
+
+@pytest.mark.parametrize('notify', [False, True])
+@pytest.mark.parametrize('data_type', [
+    None, ca.ChannelType.CHAR, ca.ChannelType.TIME_CHAR,
+])
+@pytest.mark.parametrize('value', [0, 1, 255])
+def test_write_char_scalar(circuit_pair, backends, notify, data_type, value):
+    client, server = circuit_pair
+    channel, _ = make_channels(client, server, ca.ChannelType.CHAR, 1)
+
+    metadata = (DBR_TIME_CHAR(status=1, severity=2)
+                if data_type == ca.ChannelType.TIME_CHAR else None)
+    request = channel.write(value, data_type=data_type, metadata=metadata,
+                            notify=notify)
+    (received,), _ = server.recv(*(bytes(buf) for buf in client.send(request)))
+    server.process_command(received)
+
+    expected_type = ca.WriteNotifyRequest if notify else ca.WriteRequest
+    assert isinstance(received, expected_type)
+    assert received.data_type == (data_type or ca.ChannelType.CHAR)
+    assert received.data_count == 1
+    assert list(received.data) == [value]
+    if metadata is not None:
+        assert bytes(received.metadata) == bytes(metadata)
+
+
+@pytest.mark.parametrize('notify', [False, True])
+@pytest.mark.parametrize('data', [
+    b'\x00\xff', '\x00\xff', [0, 255], (0, 255), array.array('B', [0, 255]),
+])
+def test_write_char_sequence(circuit_pair, backends, notify, data):
+    client, server = circuit_pair
+    channel, _ = make_channels(client, server, ca.ChannelType.CHAR, 8)
+
+    request = channel.write(data, notify=notify)
+    (received,), _ = server.recv(*(bytes(buf) for buf in client.send(request)))
+    server.process_command(received)
+
+    assert received.data_type == ca.ChannelType.CHAR
+    assert received.data_count == 2
+    assert list(received.data) == [0, 255]
+
+
+@pytest.mark.parametrize('notify', [False, True])
+def test_write_numpy_char_scalar(circuit_pair, backends, notify):
+    numpy = pytest.importorskip('numpy')
+    client, server = circuit_pair
+    channel, _ = make_channels(client, server, ca.ChannelType.CHAR, 1)
+
+    request = channel.write(numpy.uint8(255), notify=notify)
+    (received,), _ = server.recv(*(bytes(buf) for buf in client.send(request)))
+    server.process_command(received)
+
+    assert received.data_count == 1
+    assert list(received.data) == [255]
+
+
+@pytest.mark.parametrize('notify', [False, True])
+@pytest.mark.parametrize('data_type, value, expected', [
+    (ca.ChannelType.INT, -5, -5),
+    (ca.ChannelType.LONG, 70000, 70000),
+    (ca.ChannelType.DOUBLE, 1.25, 1.25),
+    (ca.ChannelType.STRING, 'value', b'value'),
+    (ca.ChannelType.STRING, b'value', b'value'),
+])
+def test_write_scalar(circuit_pair, backends, notify, data_type, value, expected):
+    client, server = circuit_pair
+    channel, _ = make_channels(client, server, data_type, 1)
+
+    request = channel.write(value, notify=notify)
+    (received,), _ = server.recv(*(bytes(buf) for buf in client.send(request)))
+    server.process_command(received)
+
+    assert received.data_type == data_type
+    assert received.data_count == 1
+    assert list(received.data) == [expected]
 
 
 def test_circuit_properties():
