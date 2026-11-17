@@ -594,6 +594,77 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     sub.clear()
 
 
+@pytest.mark.parametrize('phase', ['before_dispatch', 'after_dispatch'])
+def test_subscription_callback_during_initial_response(ioc, context,
+                                                       monkeypatch, phase):
+    pv, = context.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection(timeout=10)
+    initial_value = pv.read().data.tolist()[0]
+    sub = pv.subscribe()
+    dispatched = threading.Event()
+    resume = threading.Event()
+    registration_started = threading.Event()
+    registration_finished = threading.Event()
+    late_received = threading.Event()
+    first_values, late_values, errors = [], [], []
+    original_process = caproto.threading.client.CallbackHandler.process
+
+    def pause_dispatch(handler, *args, **kwargs):
+        if handler is sub and not dispatched.is_set():
+            if phase == 'after_dispatch':
+                original_process(handler, *args, **kwargs)
+            dispatched.set()
+            assert resume.wait(timeout=10)
+            if phase == 'before_dispatch':
+                original_process(handler, *args, **kwargs)
+        else:
+            original_process(handler, *args, **kwargs)
+
+    def first_callback(subscription, command):
+        first_values.append(command.data.tolist()[0])
+
+    def late_callback(subscription, command):
+        late_values.append(command.data.tolist()[0])
+        late_received.set()
+
+    def register_callback():
+        registration_started.set()
+        try:
+            sub.add_callback(late_callback)
+        except Exception as exc:
+            errors.append(exc)
+        finally:
+            registration_finished.set()
+
+    monkeypatch.setattr(caproto.threading.client.CallbackHandler, 'process',
+                        pause_dispatch)
+    thread = threading.Thread(target=register_callback)
+    try:
+        sub.add_callback(first_callback)
+        assert dispatched.wait(timeout=10)
+        thread.start()
+        assert registration_started.wait(timeout=5)
+        # Registration may wait for initial-response processing to release
+        # the callback lock. Either ordering must deliver the initial value.
+        registration_finished.wait(timeout=1)
+        resume.set()
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+        assert not errors
+        assert late_received.wait(timeout=2)
+        wait_for(lambda: len(first_values) == 1, timeout=5)
+        assert late_values == [initial_value]
+        assert first_values == [initial_value]
+        pv.write(initial_value + 1, wait=True)
+        wait_for(lambda: len(first_values) == len(late_values) == 2, timeout=5)
+        assert first_values == late_values == [initial_value, initial_value + 1]
+    finally:
+        resume.set()
+        if thread.ident is not None:
+            thread.join(timeout=5)
+        sub.clear()
+
+
 @pytest.mark.flaky(reruns=3)
 def test_multithreaded_many_subscribe(ioc, context, thread_count,
                                       multi_iterations):

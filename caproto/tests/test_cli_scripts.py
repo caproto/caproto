@@ -41,7 +41,7 @@ def _subprocess_communicate(process, command, timeout=10.0):
     assert process.poll() == 0
 
 
-@pytest.mark.parametrize('more_kwargs,',
+@pytest.mark.parametrize('more_kwargs',
                          [{'repeater': False},
                           {'timeout': 3},
                           {'notify': True},
@@ -58,7 +58,7 @@ def test_options(func, args, kwargs, more_kwargs, ioc):
     func(*args, **kwargs)
 
 
-@pytest.mark.parametrize('more_kwargs,',
+@pytest.mark.parametrize('more_kwargs',
                          [{'repeater': False},
                           {'timeout': 3},
                           ]

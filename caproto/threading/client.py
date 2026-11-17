@@ -2184,9 +2184,12 @@ class Subscription(CallbackHandler):
         # As implemented below, updates are blocking further messages from
         # the CA servers from processing. (-> ThreadPool, etc.)
         pv = self.pv
-        super().process(self, command)
+        with self.callback_lock:
+            # New callbacks must either join this dispatch or receive the
+            # cached response, without missing it or receiving it twice.
+            self.most_recent_response = command
+            super().process(self, command)
         self.log.debug("%r: %r", pv.name, command)
-        self.most_recent_response = command
 
     def add_callback(self, func):
         """
