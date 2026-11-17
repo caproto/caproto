@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import socket
 from typing import Any, Callable, Optional
 
 import pytest
@@ -14,7 +15,6 @@ try:
 except ImportError:
     catvs = None
 
-import caproto as ca
 from caproto.tests.verify_with_catvs import CatvsIOC
 
 logger = logging.getLogger(__name__)
@@ -93,19 +93,29 @@ def catvs_ioc_runner():
             else:
                 raise
 
-    # NOTE: catvs expects server tcp_port==udp_port, so make a weak attempt
-    # here to avoid clashing between servers
-    asyncio_runner.port = list(ca.random_ports(1))[0]
+    # Let the OS choose an available UDP port. The server may use a different
+    # TCP port if this number is already in use for TCP.
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.bind(('127.0.0.1', 0))
+        asyncio_runner.port = sock.getsockname()[1]
     asyncio_runner.backend = "asyncio"
     return asyncio_runner
 
 
-def hacked_setup(test_inst, port):
-    test_inst.testport = port
+def hacked_setup(test_inst, tcp_port, udp_port):
+    test_inst.testport = tcp_port
     if isinstance(test_inst, catvs.util.TestMixinClient):
         catvs.util.TestMixinClient.setUp(test_inst)
     if isinstance(test_inst, catvs.util.TestMixinServer):
         catvs.util.TestMixinServer.setUp(test_inst)
+
+    # catvs also uses testport as the expected TCP port in search responses.
+    # Keep that expectation while sending datagrams to the actual UDP port.
+    def send_udp(messages):
+        packet = b''.join(message.pack() for message in messages)
+        test_inst.usock.sendto(packet, ('127.0.0.1', udp_port))
+
+    test_inst.sendUDP = send_udp
 
 
 def hacked_teardown(test_inst):
@@ -168,10 +178,22 @@ def test_catvs(catvs_ioc_runner: Callable, test_class: type, test_name: str):
 
         ctx = catvs_ioc_runner.context
 
-        port = ctx.ca_server_port if "udp" in test_name.lower() else ctx.port
-        hacked_setup(test_inst, port)
+        hacked_setup(test_inst, ctx.port, ctx.ca_server_port)
         test_func = getattr(test_inst, test_name)
         print(f"Running {test_func.__name__}")
         test_func()
 
     catvs_ioc_runner(client_test, threaded_client=True)
+
+
+@pytest.mark.skipif(catvs is None, reason='catvs unavailable')
+def test_catvs_udp_search_with_tcp_port_in_use(catvs_ioc_runner):
+    from catvs.server.test_search import TestSearchUDP
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+        occupied.bind(('127.0.0.1', 0))
+        occupied.listen()
+        catvs_ioc_runner.port = occupied.getsockname()[1]
+        test_catvs(catvs_ioc_runner, TestSearchUDP, 'test_udplookup')
+        ctx = catvs_ioc_runner.context
+        assert ctx.port != ctx.ca_server_port
